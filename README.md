@@ -1,39 +1,35 @@
-# CareerLens 🇲🇾 — Offline Android Job Tracker, Screenshot OCR & Salary/EPF Studio
+# CareerLens 🇲🇾 (v2.0) — Offline Android Job Tracker, 3-Mode Bounding-Box OCR & Malaysia Salary/EPF Studio
 
-**CareerLens** is a **100% offline, privacy-first native Android application** built with **Kotlin, Jetpack Compose (Material 3), Room SQLite, and bundled on-device Google ML Kit OCR**. It is tailored for the **Malaysian & regional job market** (with full multi-currency support) to track job applications, multi-round interviews, and side-by-side total compensation comparisons.
+**CareerLens** is a **100% offline, privacy-first native Android application** built with **Kotlin, Jetpack Compose (Material 3), Room SQLite, and bundled on-device Google ML Kit OCR**. It is tailored for the **Malaysian & regional job market** (with full multi-currency support) to track job applications, multi-round interviews, negotiation playbooks, and side-by-side total compensation comparisons.
 
 ---
 
-## ✨ Key Features
+## ✨ Key Features (v2.0 Upgrade)
 
-### 1. 📸 100% Offline Screenshot OCR & "Share-to-CareerLens"
+### 1. 📸 3-Mode Interactive Bounding-Box OCR & Offline Vault
 - **System Share Target (`Intent.ACTION_SEND`):** Share any screenshot from **JobStreet MY, LinkedIn, Hiredly, MyFutureJobs, Indeed, or WhatsApp** directly to CareerLens.
-- **Bundled On-Device ML Kit Text Recognition:** Extracts text and bounding boxes in `< 300ms` with **zero internet permissions**.
-- **Interactive Tap-to-Fill Chips:** Tap any highlighted pill from the screenshot to assign it to `[Role]`, `[Company]`, `[Min/Max Salary]`, `[Location]`, or `[Notes]`.
-- **Malaysia-Aware Regex Heuristics:** Automatically detects `RM` / `MYR` / `SGD` / `USD` monthly & annual salary ranges and Malaysian tech hubs (`Kuala Lumpur`, `Bangsar South`, `KL Sentral`, `Petaling Jaya`, `Cyberjaya`, `Penang`, `Johor Bahru`, `Remote`).
+- **Interactive Bounding-Box Image Canvas:** Tap glowing bounding boxes directly on the screenshot image (or tap the extracted pills below) to assign fields in 1 second.
+- **3 Specialized OCR Modes:**
+  1. **Job Posting Mode:** Auto-detects Role, Company, `RM`/`SGD`/`USD` salary ranges, and Malaysian hubs (`Kuala Lumpur`, `Bangsar South`, `KL Sentral`, `PJ`, `Cyberjaya`, `Penang`, `JB`).
+  2. **Offer Letter Mode:** Extracts Base Salary, Fixed Allowances, Bonus Months, Employer EPF `%`, and Annual Leave directly into the Offer Studio.
+  3. **Interview Invite Mode:** Extracts interview round type and Google Meet / MS Teams / Zoom links with local reminder scheduling.
+- **Persistent Internal Screenshot Vault:** Copies shared screenshots into internal app storage (`/files/screenshots/`) so gallery deletions never break attachments.
 
-### 2. 💰 Malaysia Salary, EPF (KWSP) & Multi-Currency Comparison Studio
-- **Currency Presets + Offline Exchange Rate Editor:** Built-in presets for **`MYR (RM)`**, **`SGD (S$)`**, **`USD ($)`**, **`EUR (€)`**, **`GBP (£)`**, and **`AUD (A$)`** with a manual exchange-rate editor.
-- **Malaysian Statutory & Perk Breakdown:**
-  - **Employee EPF (`11%`)** & **Employer EPF (`12%` / `13%` / `16%` MNC & Bank executive tiers)**
-  - **SOCSO (PERKESO) + EIS** & **Progressive LHDN PCB Monthly Tax Estimate**
-  - **Fixed Allowances**, **AWS (13th Month) & Performance Bonuses**, and **RSU / Equity Grants**
-  - **Klang Valley / Regional Commute Deductor:** Factor in monthly tolls, petrol, season parking, or RapidKL passes based on `Onsite Days / Week` to compare **Monthly Net Take-Home Pay**, **True Disposable Cash After Commute**, and **Total Annual Package**.
-- **Custom Compose Canvas Stacked Bar Charts:** Visualizes how Base, Allowances, Bonuses, Employer EPF, and Equity stack up across offers.
+### 2. 💰 Malaysia Salary, EPF (KWSP), Baseline Jump `%` & Counter-Offer Studio
+- **"My Current Job" Baseline & Increment `%` Calculator:** Set your current base salary, EPF `%`, and commute cost once to see exact **`+RM/mo` and `+%` Net Take-Home & Annual Package jumps** on every offer card.
+- **Live What-If Counter-Offer Simulator:** Drag a live slider (`+RM 250` to `+RM 3,500/mo`) during recruiter calls to immediately see how a counter-offer affects Net Take-Home, Employer EPF, and LHDN PCB tax brackets.
+- **LHDN Malaysia Tax Relief & Zakat Customizer:** Customize extra tax reliefs (Medical, SSPN, Child, Insurance) and 1:1 **Zakat / Fitrah rebates** for accurate monthly PCB estimates.
+- **Currency Presets + Manual Rate Editor:** Built-in presets for **`MYR (RM)`**, **`SGD (S$)`**, **`USD ($)`**, **`EUR (€)`**, **`GBP (£)`**, and **`AUD (A$)`** with an offline exchange-rate editor.
 
-### 3. 📋 Executive Pipeline (Kanban + List) & Interview Hub
-- **Dual Pipeline Views:** Switch seamlessly between a swipeable **Kanban Board** and a **Filterable List View** with Malaysia location quick-chips.
-- **Interview Agenda & Local Reminders:** Track multi-round interviews (`HR Screen`, `Online Assessment`, `Technical`, `System Design`, `Hiring Manager`) with `WorkManager` local notifications.
-- **100% Offline Data Portability:** Export and restore your full database via **JSON** or export applications and offers to **CSV**.
+### 3. 📊 Career Analytics Funnel & Malaysia Negotiation Playbook
+- **Pipeline Conversion Funnel & Portal ROI:** Visualizes conversion across `Applied` → `Assessment` → `Interview` → `Offer` and tracks which job portal (*JobStreet MY* vs. *LinkedIn* vs. *Hiredly*) yields the highest callback rate.
+- **Stale Application Follow-Up Radar:** Flags active applications with no update in `> 10 days` and copies personalized follow-up messages in 1 tap.
+- **Malaysia Recruiter Negotiation Scripts & STAR Story Bank:** Copy-ready WhatsApp/Email templates for Employer EPF differentials (`16%` vs `12%`), unvested bonus buyouts, and deadline extensions, plus an editable **STAR Behavioral Story Bank**.
 
----
-
-## 🛠️ Tech Stack
-- **UI:** 100% Kotlin, Jetpack Compose, Material 3 (Executive Obsidian Dark & Clean Daylight themes)
-- **Architecture:** Clean MVVM with Kotlin `Coroutines` & `StateFlow`
-- **Database:** Room SQLite (`2.6.1`) with KSP
-- **On-Device OCR:** Google ML Kit Text Recognition (`com.google.mlkit:text-recognition:16.0.1`)
-- **Background Reminders:** AndroidX `WorkManager`
+### 4. 📄 Offline PDF Offer Report, Native File Save & Privacy Salary Mask
+- **1-Page Printable PDF Offer Comparison Report:** Generates an A4 Landscape PDF comparing all offers side-by-side using Android's native `PdfDocument` API.
+- **Native Android `Downloads` File Save/Restore:** Save `.pdf`, `.csv`, and `.json` backup files directly via the system file picker.
+- **1-Tap Privacy Salary Mask (`RM •••••`):** Toggle the eye icon in the top bar to blur/mask all salary figures when showing your app in public.
 
 ---
 
@@ -41,4 +37,4 @@
 ```bash
 ./gradlew assembleDebug
 ```
-The compiled debug APK will be generated at `app/build/outputs/apk/debug/app-debug.apk`.
+The compiled debug APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.

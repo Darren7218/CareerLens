@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.WorkOutline
 import androidx.compose.material3.Badge
@@ -40,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.careerlens.app.data.local.JobApplicationEntity
 import com.careerlens.app.ui.screens.AddOrEditJobDialog
+import com.careerlens.app.ui.screens.AnalyticsAndPlaybookScreen
 import com.careerlens.app.ui.screens.ApplicationDetailDialog
 import com.careerlens.app.ui.screens.CurrencyExchangeEditorDialog
 import com.careerlens.app.ui.screens.InterviewAgendaScreen
@@ -55,6 +57,7 @@ private enum class BottomNavTab(val label: String, val icon: ImageVector) {
     PIPELINE("Pipeline", Icons.Default.WorkOutline),
     OCR_SCANNER("OCR Scan", Icons.Default.DocumentScanner),
     SALARY_STUDIO("Salary & EPF", Icons.Default.Payments),
+    PLAYBOOK("Playbook", Icons.Default.Insights),
     INTERVIEWS("Interviews", Icons.Default.CalendarMonth)
 }
 
@@ -108,6 +111,7 @@ private fun CareerLensAppRoot(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val screenshotUri by viewModel.activeScreenshotUri.collectAsStateWithLifecycle()
+    val activeOcrMode by viewModel.activeOcrMode.collectAsStateWithLifecycle()
     val parsedOcrResult by viewModel.parsedOcrResult.collectAsStateWithLifecycle()
     val isOcrProcessing by viewModel.isOcrProcessing.collectAsStateWithLifecycle()
     val bannerMessage by viewModel.statusBannerMessage.collectAsStateWithLifecycle()
@@ -190,11 +194,13 @@ private fun CareerLensAppRoot(
                         onLocationFilterChange = viewModel::setLocationFilter,
                         onStageFilterChange = viewModel::setStageFilter,
                         onToggleKanbanMode = viewModel::toggleKanbanMode,
+                        onTogglePrivacyMask = viewModel::toggleSalaryPrivacyMask,
                         onOpenJobDetail = { selectedJobForDetail = it },
                         onQuickAdvanceStage = viewModel::advanceJobStage,
                         onOpenAddJobModal = { showAddJobDialog = true },
                         onOpenOcrScanner = { selectedTab = BottomNavTab.OCR_SCANNER.ordinal },
                         onOpenSalaryStudio = { selectedTab = BottomNavTab.SALARY_STUDIO.ordinal },
+                        onOpenAnalyticsPlaybook = { selectedTab = BottomNavTab.PLAYBOOK.ordinal },
                         onOpenCurrencyDialog = { showCurrencyEditorDialog = true }
                     )
                 }
@@ -202,9 +208,12 @@ private fun CareerLensAppRoot(
                 BottomNavTab.OCR_SCANNER -> {
                     OcrScannerScreen(
                         screenshotUri = screenshotUri,
+                        activeOcrMode = activeOcrMode,
                         parsedResult = parsedOcrResult,
                         isProcessing = isOcrProcessing,
                         availableCurrencies = uiState.currencies.map { it.code },
+                        existingApplications = uiState.applications,
+                        onChangeOcrMode = viewModel::setOcrMode,
                         onPickScreenshotUri = viewModel::scanScreenshotUri,
                         onLoadSampleTemplate = viewModel::loadDemoMalaysiaJobScreenshotTemplate,
                         onUpdateParsedResult = viewModel::updateParsedOcrResult,
@@ -215,6 +224,14 @@ private fun CareerLensAppRoot(
                             } else {
                                 BottomNavTab.PIPELINE.ordinal
                             }
+                        },
+                        onSaveExtractedOfferPackage = { app, base, allow, bonus, epf, leave ->
+                            viewModel.saveOfferFromOcr(app, base, allow, bonus, epf, leave)
+                            selectedTab = BottomNavTab.SALARY_STUDIO.ordinal
+                        },
+                        onSaveExtractedInterviewRound = { round, comp, role ->
+                            viewModel.saveInterviewRound(round, comp, role)
+                            selectedTab = BottomNavTab.INTERVIEWS.ordinal
                         }
                     )
                 }
@@ -226,11 +243,24 @@ private fun CareerLensAppRoot(
                         currencies = uiState.currencies,
                         displayCurrencyCode = uiState.displayCurrencyCode,
                         displayCurrencySymbol = uiState.displayCurrencySymbol,
+                        currentBaseline = uiState.currentBaseline,
+                        isSalaryMasked = uiState.isSalaryPrivacyMasked,
                         onSelectDisplayCurrency = viewModel::selectDisplayCurrency,
                         onSaveCurrencyRate = { code, sym, name, rate ->
                             viewModel.saveCurrencyRate(code, sym, name, rate)
                         },
-                        onSaveOffer = viewModel::saveJobOffer
+                        onSaveBaseline = viewModel::saveCurrentBaseline,
+                        onSaveOffer = viewModel::saveJobOffer,
+                        onExportPdfToUri = viewModel::exportOfferComparisonPdfToUri
+                    )
+                }
+
+                BottomNavTab.PLAYBOOK -> {
+                    AnalyticsAndPlaybookScreen(
+                        applications = uiState.applications,
+                        starStories = uiState.starStories,
+                        onSaveStarStory = viewModel::saveStarStory,
+                        onShowToastMessage = viewModel::postBannerMessage
                     )
                 }
 
@@ -243,6 +273,9 @@ private fun CareerLensAppRoot(
                         onDeleteInterview = viewModel::deleteInterviewRound,
                         onExportJson = viewModel::generateBackupJson,
                         onExportCsv = viewModel::generateExportCsv,
+                        onSaveFileToUri = viewModel::saveTextFileToUri,
+                        onExportPdfToUri = viewModel::exportOfferComparisonPdfToUri,
+                        onRestoreFromUri = viewModel::restoreFromBackupUri,
                         onImportJson = viewModel::restoreFromBackupJson
                     )
                 }

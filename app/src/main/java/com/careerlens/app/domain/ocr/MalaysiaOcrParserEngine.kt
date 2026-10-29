@@ -3,6 +3,7 @@ package com.careerlens.app.domain.ocr
 import android.content.Context
 import android.graphics.Rect
 import android.net.Uri
+import com.careerlens.app.domain.model.InterviewRoundType
 import com.careerlens.app.domain.model.JobStage
 import com.careerlens.app.domain.model.MalaysiaPresets
 import com.careerlens.app.domain.model.WorkMode
@@ -10,20 +11,28 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 import kotlin.math.max
 import kotlin.math.min
 
 /**
  * Represents a single recognized visual text block on a screenshot with its spatial coordinates
- * so the user can tap any pill on the screenshot to assign it to Company, Role, Salary, etc.
+ * and normalized bounding box (0f..1f) so the user can tap directly on the screenshot image canvas
+ * or tap any pill below the screenshot to assign it to Company, Role, Salary, etc.
  */
 data class OcrBlockChip(
     val id: Int,
     val text: String,
     val boundingBox: Rect?,
     val normalizedTop: Float, // 0f (top) to 1f (bottom)
-    val suggestedTag: String? = null // e.g., "ROLE", "COMPANY", "SALARY", "LOCATION"
+    val normalizedLeft: Float = 0.08f,
+    val normalizedRight: Float = 0.92f,
+    val normalizedBottom: Float = 0.15f,
+    val suggestedTag: String? = null // e.g., "ROLE", "COMPANY", "SALARY", "LOCATION", "EPF", "MEET_LINK"
 )
 
 data class ParsedJobScreenshot(
@@ -37,8 +46,18 @@ data class ParsedJobScreenshot(
     val detectedPortalSource: String = "JobStreet MY",
     val detectedStage: JobStage = JobStage.APPLIED,
     val detectedNotes: String = "",
+    // v2.0 Offer Letter specific extracted fields
+    val detectedAllowanceMonthly: Double = 400.0,
+    val detectedBonusMonths: Double = 1.5,
+    val detectedEmployerEpfPercent: Double = 12.0,
+    val detectedAnnualLeaveDays: Int = 18,
+    // v2.0 Interview Invite specific extracted fields
+    val detectedInterviewRoundType: InterviewRoundType = InterviewRoundType.TECHNICAL,
+    val detectedMeetingLinkOrPlatform: String = "Google Meet / Microsoft Teams",
+    val detectedInterviewerName: String = "",
     val fullRawText: String = "",
-    val blockChips: List<OcrBlockChip> = emptyList()
+    val blockChips: List<OcrBlockChip> = emptyList(),
+    val vaultedScreenshotUri: String? = null
 )
 
 class MalaysiaOcrParserEngine {
@@ -48,29 +67,59 @@ class MalaysiaOcrParserEngine {
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     }
 
+    /**
+     * Copies any shared/picked screenshot URI into CareerLens's internal offline vault
+     * (`filesDir/screenshots/`) so gallery deletions or expired URI permissions never break images.
+     */
+    suspend fun copyUriToInternalVault(context: Context, sourceUri: Uri): Uri = withContext(Dispatchers.IO) {
+        runCatching {
+            val vaultDir = File(context.filesDir, "screenshots").apply { mkdirs() }
+            val destFile = File(vaultDir, "scan_${System.currentTimeMillis()}.jpg")
+            context.contentResolver.openInputStream(sourceUri)?.use { input ->
+                FileOutputStream(destFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            Uri.fromFile(destFile)
+        }.getOrDefault(sourceUri)
+    }
+
     suspend fun processScreenshotUri(context: Context, imageUri: Uri): Result<ParsedJobScreenshot> {
         return runCatching {
-            val inputImage = InputImage.fromFilePath(context, imageUri)
+            val vaultedUri = copyUriToInternalVault(context, imageUri)
+            val inputImage = InputImage.fromFilePath(context, vaultedUri)
+            val imageWidth = max(1, inputImage.width)
             val imageHeight = max(1, inputImage.height)
             val visionText = recognizer.process(inputImage).await()
-            parseVisionText(visionText, imageHeight)
+            parseVisionText(visionText, imageWidth, imageHeight, vaultedUri.toString())
         }
     }
 
     fun parseRawText(rawText: String): ParsedJobScreenshot {
         val lines = rawText.lines().map { it.trim() }.filter { it.isNotBlank() }
+        val total = max(1, lines.size)
         val syntheticChips = lines.mapIndexed { index, line ->
+            val top = (index.toFloat() / total) * 0.85f + 0.05f
+            val bottom = (top + (0.75f / total)).coerceAtMost(0.96f)
             OcrBlockChip(
                 id = index,
                 text = line,
                 boundingBox = null,
-                normalizedTop = index.toFloat() / max(1, lines.size)
+                normalizedTop = top,
+                normalizedLeft = 0.06f,
+                normalizedRight = 0.94f,
+                normalizedBottom = bottom
             )
         }
-        return runHeuristics(rawText, syntheticChips)
+        return runHeuristics(rawText, syntheticChips, null)
     }
 
-    private fun parseVisionText(visionText: Text, imageHeight: Int): ParsedJobScreenshot {
+    private fun parseVisionText(
+        visionText: Text,
+        imageWidth: Int,
+        imageHeight: Int,
+        vaultedUriString: String?
+    ): ParsedJobScreenshot {
         val rawBlocks = mutableListOf<OcrBlockChip>()
         var counter = 0
         for (block in visionText.textBlocks) {
@@ -79,22 +128,32 @@ class MalaysiaOcrParserEngine {
                 if (clean.length >= 2) {
                     val box = line.boundingBox
                     val normTop = if (box != null) (box.top.toFloat() / imageHeight).coerceIn(0f, 1f) else 0.5f
+                    val normBottom = if (box != null) (box.bottom.toFloat() / imageHeight).coerceIn(0f, 1f) else (normTop + 0.06f)
+                    val normLeft = if (box != null) (box.left.toFloat() / imageWidth).coerceIn(0f, 1f) else 0.08f
+                    val normRight = if (box != null) (box.right.toFloat() / imageWidth).coerceIn(0f, 1f) else 0.92f
                     rawBlocks.add(
                         OcrBlockChip(
                             id = counter++,
                             text = clean,
                             boundingBox = box,
-                            normalizedTop = normTop
+                            normalizedTop = normTop,
+                            normalizedLeft = normLeft,
+                            normalizedRight = normRight,
+                            normalizedBottom = normBottom
                         )
                     )
                 }
             }
         }
         val sortedChips = rawBlocks.sortedBy { it.normalizedTop }
-        return runHeuristics(visionText.text, sortedChips)
+        return runHeuristics(visionText.text, sortedChips, vaultedUriString)
     }
 
-    private fun runHeuristics(fullText: String, chips: List<OcrBlockChip>): ParsedJobScreenshot {
+    private fun runHeuristics(
+        fullText: String,
+        chips: List<OcrBlockChip>,
+        vaultedUriString: String?
+    ): ParsedJobScreenshot {
         val lowerFull = fullText.lowercase()
 
         // 1. Detect Portal Source
@@ -124,13 +183,40 @@ class MalaysiaOcrParserEngine {
             else -> JobStage.APPLIED
         }
 
-        // 4. Detect Currency & Salary Range (Supports "RM 8,000 - RM 12,000", "MYR 9.5k - 13k", "SGD 6,500", "$5,000")
+        // 4. Detect Currency & Salary Range
         val salaryMatch = extractCurrencyAndSalaryRange(fullText)
 
         // 5. Detect Malaysian Hub / Location
         val detectedLocation = detectMalaysiaLocation(fullText)
 
-        // 6. Detect Role Title & Company Name from top chips
+        // 6. Detect Offer Letter Specifics (EPF %, Annual Leave Days, Bonus Months)
+        val epfRegex = Regex("""(?i)(\d{2})\s*%\s*(?:employer\s*)?epf|epf\s*(?:contribution\s*)?(\d{2})\s*%""")
+        val epfMatch = epfRegex.find(fullText)
+        val detectedEmployerEpf = epfMatch?.groupValues?.drop(1)?.firstOrNull { it.isNotBlank() }?.toDoubleOrNull()
+            ?: if (salaryMatch.first == "MYR") 12.0 else 0.0
+
+        val leaveRegex = Regex("""(?i)(\d{2})\s*days?\s*(?:annual\s*leave|al\b|paid\s*leave)""")
+        val detectedLeaveDays = leaveRegex.find(fullText)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 18
+
+        val bonusRegex = Regex("""(?i)(\d+(?:\.\d+)?)\s*months?\s*(?:performance\s*|contractual\s*)?bonus""")
+        val detectedBonusMonths = bonusRegex.find(fullText)?.groupValues?.getOrNull(1)?.toDoubleOrNull() ?: 1.5
+
+        // 7. Detect Interview Specifics (Meet / Teams / Zoom Link & Round Type)
+        val meetingPlatform = when {
+            lowerFull.contains("meet.google.com") || lowerFull.contains("google meet") -> "Google Meet"
+            lowerFull.contains("teams.microsoft.com") || lowerFull.contains("microsoft teams") -> "Microsoft Teams"
+            lowerFull.contains("zoom.us") || lowerFull.contains("zoom") -> "Zoom Video"
+            else -> "Google Meet"
+        }
+        val roundType = when {
+            lowerFull.contains("system design") || lowerFull.contains("architecture") -> InterviewRoundType.SYSTEM_DESIGN
+            lowerFull.contains("technical") || lowerFull.contains("coding") || lowerFull.contains("live code") -> InterviewRoundType.TECHNICAL
+            lowerFull.contains("hiring manager") || lowerFull.contains("hm round") -> InterviewRoundType.HIRING_MANAGER
+            lowerFull.contains("recruiter") || lowerFull.contains("hr screen") -> InterviewRoundType.HR_SCREEN
+            else -> InterviewRoundType.TECHNICAL
+        }
+
+        // 8. Detect Role Title & Company Name from top chips
         val roleKeywords = listOf(
             "engineer", "developer", "architect", "manager", "analyst", "designer",
             "lead", "specialist", "consultant", "scientist", "intern", "executive",
@@ -138,11 +224,11 @@ class MalaysiaOcrParserEngine {
         )
         val companySuffixes = listOf(
             "sdn bhd", "berhad", "bhd", "pte ltd", "inc", "corp", "technologies",
-            "digital", "group", "malaysia", "bank", "labs", "solutions", "global"
+            "digital", "group", "malaysia", "bank", "labs", "solutions", "global", "gxbank", "wise", "foodpanda"
         )
         val ignoreNoise = listOf(
             "9:41", "100%", "5g", "4g", "lte", "jobstreet", "linkedin", "easy apply",
-            "apply now", "save", "share", "posted", "ago", "applicants"
+            "apply now", "save", "share", "posted", "ago", "applicants", "letter of"
         )
 
         var roleCandidate = ""
@@ -150,7 +236,7 @@ class MalaysiaOcrParserEngine {
 
         val filteredChips = chips.filter { chip ->
             val l = chip.text.lowercase()
-            chip.text.length in 3..65 && ignoreNoise.none { l == it || l.startsWith("posted ") }
+            chip.text.length in 3..65 && ignoreNoise.none { l == it || l.startsWith("posted ") || l.startsWith("letter of") }
         }
 
         for (chip in filteredChips) {
@@ -164,7 +250,6 @@ class MalaysiaOcrParserEngine {
             }
         }
 
-        // Fallback to top spatial lines if keywords didn't match
         if (roleCandidate.isBlank() && filteredChips.isNotEmpty()) {
             roleCandidate = filteredChips.first().text
         }
@@ -172,12 +257,12 @@ class MalaysiaOcrParserEngine {
             companyCandidate = filteredChips.firstOrNull { it.text != roleCandidate }?.text ?: ""
         }
 
-        // Tag chips so the UI can highlight them with semantic colors
         val taggedChips = chips.map { chip ->
             val tag = when {
                 chip.text == roleCandidate && roleCandidate.isNotBlank() -> "ROLE"
                 chip.text == companyCandidate && companyCandidate.isNotBlank() -> "COMPANY"
                 chip.text.contains(Regex("(?i)(RM|MYR|SGD|S\\$|USD|\\$)\\s*\\d")) -> "SALARY"
+                chip.text.contains(Regex("(?i)\\b\\d{2}%\\s*EPF|Annual Leave", RegexOption.IGNORE_CASE)) -> "PERK"
                 chip.text.contains(
                     Regex("(?i)(Kuala Lumpur|Selangor|Petaling Jaya|Bangsar|Cyberjaya|Penang|Johor|Singapore|Hybrid|Remote)")
                 ) -> "LOCATION"
@@ -197,18 +282,18 @@ class MalaysiaOcrParserEngine {
             detectedPortalSource = portal,
             detectedStage = stage,
             detectedNotes = "Imported via CareerLens Offline OCR (${portal})",
+            detectedAllowanceMonthly = if (salaryMatch.first == "MYR") 500.0 else 0.0,
+            detectedBonusMonths = detectedBonusMonths,
+            detectedEmployerEpfPercent = detectedEmployerEpf,
+            detectedAnnualLeaveDays = detectedLeaveDays,
+            detectedInterviewRoundType = roundType,
+            detectedMeetingLinkOrPlatform = meetingPlatform,
             fullRawText = fullText,
-            blockChips = taggedChips
+            blockChips = taggedChips,
+            vaultedScreenshotUri = vaultedUriString
         )
     }
 
-    /**
-     * Parses Malaysian & international salary formats:
-     * - "RM 8,500 – RM 12,000 per month"
-     * - "MYR 10k - 14k"
-     * - "SGD 6,000 - 7,500"
-     * - "RM 144,000 p.a." (auto-normalized to monthly if > 45,000 and marked annual/p.a.)
-     */
     private fun extractCurrencyAndSalaryRange(text: String): Triple<String, Double, Double> {
         val regex = Regex(
             pattern = """(?i)\b(RM|MYR|SGD|S\$|USD|US\$|\$)\s*(\d{1,3}(?:[.,]\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?\s*k)(?:\s*[-–—to]+\s*(?:RM|MYR|SGD|S\$|USD|US\$|\$)?\s*(\d{1,3}(?:[.,]\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?\s*k))?"""
@@ -237,14 +322,13 @@ class MalaysiaOcrParserEngine {
         var secondVal = parseAmount(match.groupValues[3])
         if (secondVal == 0.0) secondVal = firstVal
 
-        // Normalize annual figure to monthly if it looks like an annual package (e.g. RM 120,000 p.a.)
         val isAnnual = text.lowercase().let {
             it.contains("p.a") || it.contains("per annum") || it.contains("/yr") || it.contains("annual")
         } || firstVal >= 48_000.0
 
         if (isAnnual) {
-            firstVal = (firstVal / 12.0)
-            secondVal = (secondVal / 12.0)
+            firstVal /= 12.0
+            secondVal /= 12.0
         }
 
         return Triple(currencyCode, min(firstVal, secondVal), max(firstVal, secondVal))

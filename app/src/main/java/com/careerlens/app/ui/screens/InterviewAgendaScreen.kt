@@ -3,11 +3,12 @@ package com.careerlens.app.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -21,7 +22,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -31,10 +31,11 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Restore
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.VideoCall
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -54,15 +55,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -70,7 +68,6 @@ import androidx.compose.ui.unit.sp
 import com.careerlens.app.data.local.InterviewRoundEntity
 import com.careerlens.app.data.local.JobApplicationEntity
 import com.careerlens.app.domain.model.InterviewRoundType
-import com.careerlens.app.ui.components.CompanyMonogramAvatar
 import com.careerlens.app.ui.theme.AmberAssessment
 import com.careerlens.app.ui.theme.CyanInterview
 import com.careerlens.app.ui.theme.ElectricIndigo
@@ -89,6 +86,9 @@ fun InterviewAgendaScreen(
     onDeleteInterview: (InterviewRoundEntity) -> Unit,
     onExportJson: () -> String,
     onExportCsv: () -> String,
+    onSaveFileToUri: (Uri, String, String) -> Unit,
+    onExportPdfToUri: (Uri) -> Unit,
+    onRestoreFromUri: (Uri) -> Unit,
     onImportJson: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -99,6 +99,39 @@ fun InterviewAgendaScreen(
     var showAddRoundDialog by remember { mutableStateOf(false) }
     var showBackupModal by remember { mutableStateOf(false) }
     var exportedTextPreview by remember { mutableStateOf("") }
+
+    // v2.0 Android Storage Access Framework (SAF) Launchers for direct Downloads saving
+    val saveJsonFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        if (uri != null) {
+            onSaveFileToUri(uri, onExportJson(), "JSON Backup")
+        }
+    }
+
+    val saveCsvFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri: Uri? ->
+        if (uri != null) {
+            onSaveFileToUri(uri, onExportCsv(), "CSV Spreadsheet")
+        }
+    }
+
+    val savePdfFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri: Uri? ->
+        if (uri != null) {
+            onExportPdfToUri(uri)
+        }
+    }
+
+    val openJsonFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            onRestoreFromUri(uri)
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -120,7 +153,7 @@ fun InterviewAgendaScreen(
                         style = MaterialTheme.typography.headlineMedium
                     )
                     Text(
-                        text = "Multi-round prep checklists, reflection logs & local JSON/CSV export",
+                        text = "Multi-round checklists, reflection logs & native Downloads file export",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -208,7 +241,7 @@ fun InterviewAgendaScreen(
             }
         }
 
-        // 4. 100% Offline Data Portability (JSON Backup & CSV Export)
+        // 4. v2.0 100% Offline Data Portability (Save to Downloads: PDF, JSON, CSV + Restore)
         item {
             Spacer(modifier = Modifier.height(8.dp))
             Card(
@@ -221,45 +254,80 @@ fun InterviewAgendaScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "100% Offline Data Portability (JSON & CSV)",
+                        text = "100% Offline File Backup & PDF Report",
                         style = MaterialTheme.typography.titleLarge
                     )
                     Text(
-                        text = "Your career data never touches any cloud server. Export your full database as JSON or CSV anytime.",
+                        text = "Save directly to your Android Downloads folder or Google Drive with zero cloud lock-in.",
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(12.dp))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        Button(
+                            onClick = { savePdfFileLauncher.launch("CareerLens_Malaysia_Offer_Report.pdf") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldOffer)
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Save PDF Report")
+                        }
                         OutlinedButton(
-                            onClick = {
-                                exportedTextPreview = onExportJson()
-                                copyToClipboard(context, "CareerLens JSON Backup", exportedTextPreview)
-                                showBackupModal = true
-                            },
+                            onClick = { saveCsvFileLauncher.launch("CareerLens_Applications_Offers.csv") },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Export JSON")
+                            Text("Save CSV File")
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         OutlinedButton(
-                            onClick = {
-                                exportedTextPreview = onExportCsv()
-                                copyToClipboard(context, "CareerLens CSV", exportedTextPreview)
-                                showBackupModal = true
-                            },
+                            onClick = { saveJsonFileLauncher.launch("CareerLens_Full_Backup.json") },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Export CSV")
+                            Text("Save JSON File")
                         }
+                        OutlinedButton(
+                            onClick = { openJsonFileLauncher.launch(arrayOf("application/json", "text/*")) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Restore File")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    TextButton(
+                        onClick = {
+                            exportedTextPreview = onExportJson()
+                            copyToClipboard(context, "CareerLens JSON Backup", exportedTextPreview)
+                            showBackupModal = true
+                        },
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Or Copy / Paste Raw JSON via Clipboard")
                     }
                 }
             }

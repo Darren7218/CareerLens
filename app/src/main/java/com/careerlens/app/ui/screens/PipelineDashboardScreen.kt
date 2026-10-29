@@ -1,6 +1,5 @@
 package com.careerlens.app.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -11,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,20 +20,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.DocumentScanner
-import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ViewColumn
-import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.WorkOutline
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -51,11 +50,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.careerlens.app.data.local.JobApplicationEntity
@@ -78,17 +74,20 @@ fun PipelineDashboardScreen(
     onLocationFilterChange: (String) -> Unit,
     onStageFilterChange: (JobStage?) -> Unit,
     onToggleKanbanMode: () -> Unit,
+    onTogglePrivacyMask: () -> Unit,
     onOpenJobDetail: (JobApplicationEntity) -> Unit,
     onQuickAdvanceStage: (JobApplicationEntity) -> Unit,
     onOpenAddJobModal: () -> Unit,
     onOpenOcrScanner: () -> Unit,
     onOpenSalaryStudio: () -> Unit,
+    onOpenAnalyticsPlaybook: () -> Unit,
     onOpenCurrencyDialog: () -> Unit
 ) {
     val activeCount = uiState.applications.count { it.stage.isActivePipeline }
     val upcomingInterviewsCount = uiState.interviews.count { !it.isCompleted }
-    val offersCount = uiState.evaluatedOffers.size
-    val topOfferMonthlyNet = uiState.evaluatedOffers.maxOfOrNull { it.monthlyNetTakeHomePay } ?: 0.0
+    val topOffer = uiState.evaluatedOffers.maxByOrNull { it.monthlyNetTakeHomePay }
+    val topOfferMonthlyNet = topOffer?.monthlyNetTakeHomePay ?: 0.0
+    val topOfferJumpPct = topOffer?.netMonthlyJumpPercent ?: 0.0
 
     val currencyMap = uiState.currencies.associateBy { it.code }
     val locationQuickFilters = listOf("All", "Kuala Lumpur", "Bangsar South", "PJ", "Cyberjaya", "Penang", "JB", "Singapore", "Remote")
@@ -106,7 +105,7 @@ fun PipelineDashboardScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "CareerLens",
@@ -120,7 +119,7 @@ fun PipelineDashboardScreen(
                         border = BorderStroke(1.dp, EmeraldOffer.copy(alpha = 0.45f))
                     ) {
                         Text(
-                            text = "100% OFFLINE",
+                            text = "v2.0 OFFLINE",
                             style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
                             color = EmeraldOffer,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -135,6 +134,26 @@ fun PipelineDashboardScreen(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // v2.0 Privacy Salary Mask Toggle (Hide RM/SGD figures in public)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (uiState.isSalaryPrivacyMasked) AmberAssessment.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                    border = BorderStroke(
+                        1.dp,
+                        if (uiState.isSalaryPrivacyMasked) AmberAssessment else MaterialTheme.colorScheme.outline
+                    ),
+                    modifier = Modifier.clickable { onTogglePrivacyMask() }
+                ) {
+                    Icon(
+                        imageVector = if (uiState.isSalaryPrivacyMasked) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = "Toggle Privacy Salary Mask",
+                        tint = if (uiState.isSalaryPrivacyMasked) AmberAssessment else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(8.dp).size(18.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
                 // Active Display Currency Switcher Pill
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -143,7 +162,7 @@ fun PipelineDashboardScreen(
                     modifier = Modifier.clickable { onOpenCurrencyDialog() }
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -152,16 +171,16 @@ fun PipelineDashboardScreen(
                             tint = ElectricIndigo,
                             modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(5.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "${uiState.displayCurrencyCode} (${uiState.displayCurrencySymbol})",
+                            text = uiState.displayCurrencyCode,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
 
                 // Toggle Kanban / List View
                 Surface(
@@ -195,18 +214,20 @@ fun PipelineDashboardScreen(
                         BentoMetricCard(
                             title = "ACTIVE PIPELINE",
                             value = "$activeCount Roles",
-                            subtitle = "${uiState.applications.size} total tracked",
+                            subtitle = "${uiState.applications.size} total • Tap for Funnel",
                             accentColor = ElectricIndigo,
-                            icon = Icons.Default.WorkOutline,
-                            modifier = Modifier.weight(1f)
+                            icon = Icons.Default.Insights,
+                            modifier = Modifier.weight(1f),
+                            onClick = onOpenAnalyticsPlaybook
                         )
                         BentoMetricCard(
                             title = "INTERVIEWS",
                             value = "$upcomingInterviewsCount Upcoming",
-                            subtitle = "Local reminders active",
+                            subtitle = "STAR Bank & Scripts",
                             accentColor = CyanInterview,
                             icon = Icons.Default.CalendarMonth,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            onClick = onOpenAnalyticsPlaybook
                         )
                     }
                     Spacer(modifier = Modifier.height(10.dp))
@@ -214,19 +235,25 @@ fun PipelineDashboardScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        val jumpLabel = if (topOffer != null) {
+                            val sign = if (topOfferJumpPct >= 0) "+" else ""
+                            "${sign}${String.format("%.1f", topOfferJumpPct)}% vs Current Job"
+                        } else {
+                            "After EPF, SOCSO & PCB"
+                        }
                         BentoMetricCard(
                             title = "TOP NET TAKE-HOME",
-                            value = if (topOfferMonthlyNet > 0) "${uiState.displayCurrencySymbol} ${formatCompactNumber(topOfferMonthlyNet)}/mo" else "—",
-                            subtitle = "After EPF, SOCSO & PCB",
+                            value = if (topOfferMonthlyNet > 0) "${uiState.displayCurrencySymbol} ${formatCompactNumber(topOfferMonthlyNet, uiState.isSalaryPrivacyMasked)}/mo" else "—",
+                            subtitle = jumpLabel,
                             accentColor = EmeraldOffer,
                             icon = Icons.Default.Payments,
                             modifier = Modifier.weight(1f),
                             onClick = onOpenSalaryStudio
                         )
                         BentoMetricCard(
-                            title = "SCREENSHOT OCR",
-                            value = "Instant Scan",
-                            subtitle = "JobStreet / LinkedIn / Offer",
+                            title = "3-MODE OCR SCAN",
+                            value = "Bounding Box",
+                            subtitle = "Job Ad / Offer / Invite",
                             accentColor = AmberAssessment,
                             icon = Icons.Default.DocumentScanner,
                             modifier = Modifier.weight(1f),
@@ -236,7 +263,7 @@ fun PipelineDashboardScreen(
                 }
             }
 
-            // 2. Quick Action Banner: Scan Screenshot or Add Manually
+            // 2. Quick Action Banner: Scan Screenshot or Open Analytics
             item {
                 Spacer(modifier = Modifier.height(14.dp))
                 Card(
@@ -279,12 +306,12 @@ fun PipelineDashboardScreen(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = "Read Job / Offer Screenshot via Offline OCR",
+                                        text = "Interactive Bounding-Box OCR (Job / Offer / Invite)",
                                         style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp),
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = "Auto-detects RM/SGD salary, KL/PJ/Penang hub, role & company",
+                                        text = "Tap highlighted boxes directly on screenshots to extract RM/SGD, EPF % & hubs",
                                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -399,6 +426,7 @@ fun PipelineDashboardScreen(
                     KanbanBoardView(
                         applications = uiState.filteredApplications,
                         currencyMap = currencyMap.mapValues { it.value.symbol },
+                        isSalaryMasked = uiState.isSalaryPrivacyMasked,
                         onOpenJobDetail = onOpenJobDetail,
                         onQuickAdvanceStage = onQuickAdvanceStage
                     )
@@ -447,6 +475,7 @@ fun PipelineDashboardScreen(
                     JobApplicationCard(
                         app = app,
                         currencySymbol = symbol,
+                        isSalaryMasked = uiState.isSalaryPrivacyMasked,
                         onClick = { onOpenJobDetail(app) },
                         onQuickAdvanceStage = { onQuickAdvanceStage(app) },
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp)
@@ -461,6 +490,7 @@ fun PipelineDashboardScreen(
 private fun KanbanBoardView(
     applications: List<JobApplicationEntity>,
     currencyMap: Map<String, String>,
+    isSalaryMasked: Boolean,
     onOpenJobDetail: (JobApplicationEntity) -> Unit,
     onQuickAdvanceStage: (JobApplicationEntity) -> Unit
 ) {
@@ -526,6 +556,7 @@ private fun KanbanBoardView(
                                 JobApplicationCard(
                                     app = app,
                                     currencySymbol = currencyMap[app.currencyCode] ?: "RM",
+                                    isSalaryMasked = isSalaryMasked,
                                     onClick = { onOpenJobDetail(app) },
                                     onQuickAdvanceStage = { onQuickAdvanceStage(app) }
                                 )

@@ -42,10 +42,7 @@ import com.careerlens.app.domain.model.JobStage
 import com.careerlens.app.domain.model.WorkMode
 import com.careerlens.app.ui.theme.AmberAssessment
 import com.careerlens.app.ui.theme.CyanInterview
-import com.careerlens.app.ui.theme.ElectricIndigo
 import com.careerlens.app.ui.theme.EmeraldOffer
-import com.careerlens.app.ui.theme.RoseRejected
-import com.careerlens.app.ui.theme.VioletWishlist
 import com.careerlens.app.ui.theme.accentColor
 import java.text.NumberFormat
 import java.util.Locale
@@ -215,6 +212,7 @@ fun BentoMetricCard(
 fun JobApplicationCard(
     app: JobApplicationEntity,
     currencySymbol: String,
+    isSalaryMasked: Boolean = false,
     onClick: () -> Unit,
     onQuickAdvanceStage: () -> Unit,
     modifier: Modifier = Modifier
@@ -289,7 +287,9 @@ fun JobApplicationCard(
                 }
 
                 if (app.salaryMaxMonthly > 0) {
-                    val salaryLabel = if (app.salaryMinMonthly > 0 && app.salaryMinMonthly != app.salaryMaxMonthly) {
+                    val salaryLabel = if (isSalaryMasked) {
+                        "$currencySymbol •••••/mo"
+                    } else if (app.salaryMinMonthly > 0 && app.salaryMinMonthly != app.salaryMaxMonthly) {
                         "$currencySymbol ${formatCompactNumber(app.salaryMinMonthly)}–${formatCompactNumber(app.salaryMaxMonthly)}/mo"
                     } else {
                         "$currencySymbol ${formatCurrencyAmount(app.salaryMaxMonthly)}/mo"
@@ -355,14 +355,16 @@ fun JobApplicationCard(
     }
 }
 
-fun formatCurrencyAmount(amount: Double): String {
+fun formatCurrencyAmount(amount: Double, isMasked: Boolean = false): String {
+    if (isMasked) return "•••••"
     val formatter = NumberFormat.getNumberInstance(Locale.US).apply {
         maximumFractionDigits = 0
     }
     return formatter.format(amount)
 }
 
-fun formatCompactNumber(amount: Double): String {
+fun formatCompactNumber(amount: Double, isMasked: Boolean = false): String {
+    if (isMasked) return "•••"
     return if (amount >= 1000.0) {
         val k = amount / 1000.0
         if (k % 1.0 == 0.0) "${k.toInt()}k" else String.format(Locale.US, "%.1fk", k)

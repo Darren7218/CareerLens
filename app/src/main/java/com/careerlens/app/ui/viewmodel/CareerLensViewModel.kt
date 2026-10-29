@@ -1,6 +1,7 @@
 package com.careerlens.app.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -12,10 +13,15 @@ import com.careerlens.app.data.local.JobApplicationEntity
 import com.careerlens.app.data.local.JobOfferEntity
 import com.careerlens.app.domain.calculator.MalaysiaCompCalculator
 import com.careerlens.app.domain.calculator.OfferComparisonResult
+import com.careerlens.app.domain.model.CurrentJobBaselineProfile
 import com.careerlens.app.domain.model.JobStage
+import com.careerlens.app.domain.model.MalaysiaPresets
+import com.careerlens.app.domain.model.OcrScanMode
+import com.careerlens.app.domain.model.StarStoryItem
 import com.careerlens.app.domain.notification.InterviewReminderWorker
 import com.careerlens.app.domain.ocr.MalaysiaOcrParserEngine
 import com.careerlens.app.domain.ocr.ParsedJobScreenshot
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +29,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 data class CareerLensUiState(
     val applications: List<JobApplicationEntity> = emptyList(),
@@ -33,6 +41,9 @@ data class CareerLensUiState(
     val displayCurrencyCode: String = "MYR",
     val displayCurrencySymbol: String = "RM",
     val evaluatedOffers: List<OfferComparisonResult> = emptyList(),
+    val currentBaseline: CurrentJobBaselineProfile = CurrentJobBaselineProfile(),
+    val isSalaryPrivacyMasked: Boolean = false,
+    val starStories: List<StarStoryItem> = MalaysiaPresets.defaultStarStories,
     val searchQuery: String = "",
     val selectedLocationFilter: String = "All",
     val selectedStageFilter: JobStage? = null,
@@ -41,17 +52,25 @@ data class CareerLensUiState(
 
 class CareerLensViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val prefs = application.getSharedPreferences("careerlens_v2_prefs", Context.MODE_PRIVATE)
     private val dao = CareerLensDatabase.getInstance(application).dao()
     private val ocrEngine = MalaysiaOcrParserEngine()
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     private val _searchQuery = MutableStateFlow("")
     private val _selectedLocationFilter = MutableStateFlow("All")
     private val _selectedStageFilter = MutableStateFlow<JobStage?>(null)
     private val _isKanbanMode = MutableStateFlow(false)
+    private val _isSalaryPrivacyMasked = MutableStateFlow(prefs.getBoolean("salary_privacy_mask", false))
+    private val _currentBaseline = MutableStateFlow(loadSavedBaseline())
+    private val _starStories = MutableStateFlow(loadSavedStarStories())
 
     // OCR Scanner State
     private val _activeScreenshotUri = MutableStateFlow<Uri?>(null)
     val activeScreenshotUri: StateFlow<Uri?> = _activeScreenshotUri.asStateFlow()
+
+    private val _activeOcrMode = MutableStateFlow(OcrScanMode.JOB_AD)
+    val activeOcrMode: StateFlow<OcrScanMode> = _activeOcrMode.asStateFlow()
 
     private val _parsedOcrResult = MutableStateFlow(ParsedJobScreenshot())
     val parsedOcrResult: StateFlow<ParsedJobScreenshot> = _parsedOcrResult.asStateFlow()
@@ -62,15 +81,43 @@ class CareerLensViewModel(application: Application) : AndroidViewModel(applicati
     private val _statusBannerMessage = MutableStateFlow<String?>(null)
     val statusBannerMessage: StateFlow<String?> = _statusBannerMessage.asStateFlow()
 
+    private fun loadSavedBaseline(): CurrentJobBaselineProfile {
+        val raw = prefs.getString("current_baseline_json", null) ?: return CurrentJobBaselineProfile()
+        return runCatching { json.decodeFromString<CurrentJobBaselineProfile>(raw) }
+            .getOrDefault(CurrentJobBaselineProfile())
+    }
+
+    private fun loadSavedStarStories(): List<StarStoryItem> {
+        val raw = prefs.getString("star_stories_json", null) ?: return MalaysiaPresets.defaultStarStories
+        return runCatching { json.decodeFromString<List<StarStoryItem>>(raw) }
+            .getOrDefault(MalaysiaPresets.defaultStarStories)
+    }
+
+    private val filterFlow = combine(
+        _searchQuery,
+        _selectedLocationFilter,
+        _selectedStageFilter,
+        _isKanbanMode
+    ) { q, loc, stage, kanban ->
+        FilterTuple(q, loc, stage, kanban)
+    }
+
+    private val profileFlow = combine(
+        _currentBaseline,
+        _isSalaryPrivacyMasked,
+        _starStories
+    ) { baseline, masked, stories ->
+        Triple(baseline, masked, stories)
+    }
+
     val uiState: StateFlow<CareerLensUiState> = combine(
         dao.observeAllApplications(),
         dao.observeAllInterviews(),
         dao.observeAllOffers(),
         dao.observeCurrencyRates(),
-        combine(_searchQuery, _selectedLocationFilter, _selectedStageFilter, _isKanbanMode) { q, loc, stage, kanban ->
-            FilterTuple(q, loc, stage, kanban)
-        }
-    ) { apps, interviews, offers, currencies, filter ->
+        combine(filterFlow, profileFlow) { f, p -> f to p }
+    ) { apps, interviews, offers, currencies, (filter, profile) ->
+        val (baseline, isMasked, stories) = profile
         val currencyMap = currencies.associateBy { it.code }
         val activeDisplayCurrency = currencies.firstOrNull { it.isDefaultDisplayCurrency }
             ?: currencies.firstOrNull { it.code == "MYR" }
@@ -83,7 +130,8 @@ class CareerLensViewModel(application: Application) : AndroidViewModel(applicati
                 application = parentApp,
                 offer = offer,
                 currencyMap = currencyMap,
-                displayCurrencyCode = activeDisplayCurrency.code
+                displayCurrencyCode = activeDisplayCurrency.code,
+                baseline = baseline
             )
         }.sortedByDescending { it.annualTotalCompensationPackage }
 
@@ -110,6 +158,9 @@ class CareerLensViewModel(application: Application) : AndroidViewModel(applicati
             displayCurrencyCode = activeDisplayCurrency.code,
             displayCurrencySymbol = activeDisplayCurrency.symbol,
             evaluatedOffers = evaluatedOffers,
+            currentBaseline = baseline,
+            isSalaryPrivacyMasked = isMasked,
+            starStories = stories,
             searchQuery = filter.query,
             selectedLocationFilter = filter.location,
             selectedStageFilter = filter.stage,
@@ -144,8 +195,41 @@ class CareerLensViewModel(application: Application) : AndroidViewModel(applicati
         _isKanbanMode.value = !_isKanbanMode.value
     }
 
+    fun toggleSalaryPrivacyMask() {
+        val next = !_isSalaryPrivacyMasked.value
+        _isSalaryPrivacyMasked.value = next
+        prefs.edit().putBoolean("salary_privacy_mask", next).apply()
+    }
+
+    fun saveCurrentBaseline(updated: CurrentJobBaselineProfile) {
+        _currentBaseline.value = updated
+        prefs.edit().putString("current_baseline_json", json.encodeToString(updated)).apply()
+        _statusBannerMessage.value = "Updated Current Job Baseline & LHDN Tax Relief Profile"
+    }
+
+    fun saveStarStory(story: StarStoryItem) {
+        val current = _starStories.value.toMutableList()
+        val idx = current.indexOfFirst { it.id == story.id }
+        if (idx >= 0) {
+            current[idx] = story
+        } else {
+            current.add(0, story)
+        }
+        _starStories.value = current
+        prefs.edit().putString("star_stories_json", json.encodeToString(current)).apply()
+        _statusBannerMessage.value = "Saved STAR Behavioral Story"
+    }
+
+    fun setOcrMode(mode: OcrScanMode) {
+        _activeOcrMode.value = mode
+    }
+
     fun clearBannerMessage() {
         _statusBannerMessage.value = null
+    }
+
+    fun postBannerMessage(msg: String) {
+        _statusBannerMessage.value = msg
     }
 
     // --- Application CRUD & Stage Progression ---
@@ -170,6 +254,33 @@ class CareerLensViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
             _statusBannerMessage.value = "Saved ${app.companyName} (${app.roleTitle})"
+        }
+    }
+
+    fun saveOfferFromOcr(
+        app: JobApplicationEntity,
+        monthlyBase: Double,
+        monthlyAllowance: Double,
+        bonusMonths: Double,
+        employerEpfPct: Double,
+        annualLeaveDays: Int
+    ) {
+        viewModelScope.launch {
+            val appId = dao.upsertApplication(app.copy(stage = JobStage.OFFER, updatedAtEpoch = System.currentTimeMillis()))
+            val targetId = if (app.id == 0L) appId else app.id
+            dao.upsertOffer(
+                JobOfferEntity(
+                    applicationId = targetId,
+                    currencyCode = app.currencyCode,
+                    monthlyBaseSalary = monthlyBase,
+                    monthlyFixedAllowance = monthlyAllowance,
+                    targetPerformanceBonusMonths = bonusMonths,
+                    employeeEpfPercent = if (app.currencyCode == "MYR") 11.0 else 0.0,
+                    employerEpfPercent = employerEpfPct,
+                    annualLeaveDays = annualLeaveDays
+                )
+            )
+            _statusBannerMessage.value = "Saved Offer Letter & Package for ${app.companyName}!"
         }
     }
 
@@ -247,12 +358,6 @@ class CareerLensViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun deleteJobOffer(offer: JobOfferEntity) {
-        viewModelScope.launch {
-            dao.deleteOffer(offer)
-        }
-    }
-
     // --- Currency Presets & Manual Offline Exchange Rate Editor ---
     fun selectDisplayCurrency(code: String) {
         viewModelScope.launch {
@@ -290,7 +395,16 @@ class CareerLensViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             val result = ocrEngine.processScreenshotUri(getApplication(), uri)
             result.onSuccess { parsed ->
+                parsed.vaultedScreenshotUri?.let { vaulted ->
+                    _activeScreenshotUri.value = Uri.parse(vaulted)
+                }
                 _parsedOcrResult.value = parsed
+                // Automatically switch OCR Mode tab if screenshot is clearly an Offer Letter or Interview Invite
+                when (parsed.detectedStage) {
+                    JobStage.OFFER -> _activeOcrMode.value = OcrScanMode.OFFER_LETTER
+                    JobStage.INTERVIEW -> _activeOcrMode.value = OcrScanMode.INTERVIEW_INVITE
+                    else -> _activeOcrMode.value = OcrScanMode.JOB_AD
+                }
             }.onFailure { err ->
                 _statusBannerMessage.value = "OCR notice: ${err.localizedMessage ?: "Could not read image"}"
             }
@@ -307,44 +421,53 @@ class CareerLensViewModel(application: Application) : AndroidViewModel(applicati
             First Avenue, Bandar Utama, Petaling Jaya, Selangor
             Hybrid (3 days office, 2 days WFH)
             RM 13,500 - RM 17,000 per month
-            16% Employer EPF • Flexible Benefits • Annual Performance Bonus
+            16% Employer EPF • Flexible Benefits • 2.5 months performance bonus
             Requirements: Kotlin, Coroutines, Offline-First Room DB, Clean Architecture
             """.trimIndent(),
             """
             LETTER OF EMPLOYMENT OFFER — PRIVATE & CONFIDENTIAL
-             Wise Payments Malaysia Sdn Bhd
+            Wise Payments Malaysia Sdn Bhd
             Senior Mobile Engineer — Android
             Location: Bangsar South, Kuala Lumpur (Hybrid)
             Monthly Base Salary: RM 15,200
-            RSU Equity Grant: RM 24,000 / year
-            Annual Leave: 25 days + Wise Sabbatical
+            15% Employer EPF contribution
+            2.0 months performance bonus
+            25 days Annual Leave + Wise Sabbatical
             """.trimIndent(),
             """
-            LinkedIn Jobs • Singapore
-            Staff Mobile Software Engineer
-            Foodpanda (Delivery Hero APAC)
-            Singapore (Cross-Border / Remote)
-            SGD 8,200 - SGD 9,800 per month
-            Hybrid work arrangement • Relocation support available
+            INTERVIEW INVITATION • Microsoft Teams
+            System Design & Architecture Round
+            PETRONAS Digital Sdn Bhd
+            Kuala Lumpur (KLCC / Bukit Bintang)
+            Google Meet / Microsoft Teams Video Call
+            RM 14,000 - RM 16,500 per month
             """.trimIndent()
         )
-        val chosen = sampleTexts[templateIndex % sampleTexts.size]
+        val idx = templateIndex % sampleTexts.size
+        val chosen = sampleTexts[idx]
         _activeScreenshotUri.value = null
-        _parsedOcrResult.value = ocrEngine.parseRawText(chosen)
+        val parsed = ocrEngine.parseRawText(chosen)
+        _parsedOcrResult.value = parsed
+        _activeOcrMode.value = when (idx) {
+            1 -> OcrScanMode.OFFER_LETTER
+            2 -> OcrScanMode.INTERVIEW_INVITE
+            else -> OcrScanMode.JOB_AD
+        }
     }
 
     fun updateParsedOcrResult(updated: ParsedJobScreenshot) {
         _parsedOcrResult.value = updated
     }
 
-    // --- Offline Backup & Export ---
+    // --- Offline Backup, Native File Export & PDF Offer Matrix ---
     fun generateBackupJson(): String {
         val s = uiState.value
         return BackupExportManager.exportToJsonString(
             applications = s.applications,
             interviews = s.interviews,
             offers = s.offers,
-            currencies = s.currencies
+            currencies = s.currencies,
+            currentBaseline = s.currentBaseline
         )
     }
 
@@ -356,6 +479,50 @@ class CareerLensViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
+    fun saveTextFileToUri(uri: Uri, content: String, label: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                getApplication<Application>().contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(content.toByteArray(Charsets.UTF_8))
+                }
+            }.onSuccess {
+                _statusBannerMessage.value = "Saved $label to device storage!"
+            }.onFailure {
+                _statusBannerMessage.value = "Failed to save $label."
+            }
+        }
+    }
+
+    fun exportOfferComparisonPdfToUri(uri: Uri) {
+        val s = uiState.value
+        viewModelScope.launch(Dispatchers.IO) {
+            BackupExportManager.writeOfferComparisonPdfToUri(
+                context = getApplication(),
+                targetUri = uri,
+                evaluatedOffers = s.evaluatedOffers,
+                baseline = s.currentBaseline,
+                displaySymbol = s.displayCurrencySymbol
+            ).onSuccess {
+                _statusBannerMessage.value = "Exported 1-Page Offer Comparison PDF Report!"
+            }.onFailure { err ->
+                _statusBannerMessage.value = "PDF export error: ${err.localizedMessage}"
+            }
+        }
+    }
+
+    fun restoreFromBackupUri(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val text = getApplication<Application>().contentResolver.openInputStream(uri)
+                    ?.bufferedReader(Charsets.UTF_8)
+                    ?.use { it.readText() } ?: ""
+                restoreFromBackupJson(text)
+            }.onFailure {
+                _statusBannerMessage.value = "Could not read backup file."
+            }
+        }
+    }
+
     fun restoreFromBackupJson(jsonString: String) {
         viewModelScope.launch {
             BackupExportManager.importFromJsonString(jsonString).onSuccess { bundle ->
@@ -363,6 +530,7 @@ class CareerLensViewModel(application: Application) : AndroidViewModel(applicati
                 bundle.applications.forEach { dao.upsertApplication(it) }
                 bundle.interviews.forEach { dao.upsertInterviewRound(it) }
                 bundle.offers.forEach { dao.upsertOffer(it) }
+                saveCurrentBaseline(bundle.currentBaseline)
                 _statusBannerMessage.value = "Restored ${bundle.applications.size} applications & ${bundle.offers.size} offers!"
             }.onFailure {
                 _statusBannerMessage.value = "Invalid backup JSON format."
