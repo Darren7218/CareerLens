@@ -48,8 +48,7 @@ enum class OcrScanMode(val label: String, val subtitle: String) {
 }
 
 /**
- * v2.0 User's Current Job Baseline & LHDN Malaysia Tax Relief Profile.
- * Used to calculate exact +RM and +% increments for every job offer.
+ * v2.0 + v3.0 User's Current Job Baseline, LHDN Malaysia Tax Reliefs, KWSP Dividend Rate & ATS Skills Profile.
  */
 @Serializable
 data class CurrentJobBaselineProfile(
@@ -61,9 +60,24 @@ data class CurrentJobBaselineProfile(
     val employeeEpfPercent: Double = 11.0,
     val employerEpfPercent: Double = 12.0,
     val monthlyCommuteCostMyr: Double = 280.0,
+    val monthlyRentAndLivingMyr: Double = 2200.0,
     // LHDN Malaysia Custom Tax Reliefs (Default RM 15,500 = 9k Individual + 4k EPF + 2.5k Lifestyle)
     val additionalTaxReliefsMyr: Double = 2000.0, // e.g., Medical/Parents, SSPN, Insurance, Child relief
-    val annualZakatRebateMyr: Double = 0.0 // Direct 1:1 tax rebate for Muslim taxpayers in Malaysia
+    val annualZakatRebateMyr: Double = 0.0, // Direct 1:1 tax rebate for Muslim taxpayers in Malaysia
+    // v3.0 KWSP (EPF) Dividend Rate & Notice Period Settings
+    val expectedEpfDividendPercent: Double = 5.8, // Historical KWSP conventional/shariah range ~5.5% - 6.3%
+    val currentNoticePeriodMonths: Int = 2,
+    val remainingAnnualLeaveDays: Int = 8,
+    val userSkillsCsv: String = "Kotlin, Jetpack Compose, Android SDK, Coroutines, StateFlow, Room SQLite, MVVM, Clean Architecture, Google ML Kit, OCR, REST API, Git, CI/CD, Unit Testing, Agile"
+)
+
+/**
+ * v3.0 Regional Cost-of-Living (COL) Rent + Food Presets in MYR equivalent per month.
+ */
+data class LivingCostPreset(
+    val label: String,
+    val monthlyCostMyr: Double,
+    val description: String
 )
 
 /**
@@ -91,14 +105,13 @@ data class StarStoryItem(
 
 /**
  * Built-in Currency Presets with Malaysia Ringgit (MYR) as the default base anchor.
- * Exchange rates are 100% offline and manually editable by the user at any time.
  */
 @Serializable
 data class CurrencyPreset(
     val code: String,
     val symbol: String,
     val displayName: String,
-    val rateToMyr: Double, // e.g., 1 SGD = 3.32 MYR, 1 MYR = 1.0 MYR
+    val rateToMyr: Double,
     val flagEmoji: String
 )
 
@@ -110,6 +123,33 @@ object MalaysiaPresets {
         CurrencyPreset("EUR", "€", "Euro", 4.75, "🇪🇺"),
         CurrencyPreset("GBP", "£", "British Pound", 5.65, "🇬🇧"),
         CurrencyPreset("AUD", "A$", "Australian Dollar", 2.90, "🇦🇺")
+    )
+
+    val livingCostPresets = listOf(
+        LivingCostPreset("KL / PJ (Staying w/ Family)", 1100.0, "RM 0 Rent + RM 1,100 Food/Bills"),
+        LivingCostPreset("KL / PJ (Room Rental)", 1950.0, "RM 850 Room + RM 1,100 Food/Bills"),
+        LivingCostPreset("KL / PJ (Studio / Condo)", 3100.0, "RM 1,900 Studio + RM 1,200 Food/Bills"),
+        LivingCostPreset("Penang / JB Local", 2200.0, "RM 1,100 Rent + RM 1,100 Food/Bills"),
+        LivingCostPreset("JB → SG Daily Commute", 2600.0, "Live in JB (RM), Work in SG"),
+        LivingCostPreset("Singapore (Common Room)", 7600.0, "~S$1,400 Room + S$900 Food/Transport"),
+        LivingCostPreset("Singapore (Master/Studio)", 11200.0, "~S$2,400 Rent + S$1,000 Food/Transport")
+    )
+
+    val vestingPresets = listOf(
+        "25,25,25,25" to "Equal (25% / yr)",
+        "10,20,30,40" to "Back-Loaded (10/20/30/40)",
+        "5,15,40,40" to "Amazon-Style (5/15/40/40)",
+        "40,30,20,10" to "Front-Loaded (40/30/20/10)"
+    )
+
+    val commonTechAndDomainKeywords = listOf(
+        "Kotlin", "Java", "Jetpack Compose", "Android", "MVVM", "MVI", "Clean Architecture",
+        "Coroutines", "StateFlow", "Flow", "Room", "SQLite", "Hilt", "Dagger", "Koin",
+        "Retrofit", "OkHttp", "GraphQL", "REST API", "gRPC", "Firebase", "ML Kit", "OCR",
+        "WorkManager", "CameraX", "JUnit", "MockK", "Espresso", "CI/CD", "GitHub Actions",
+        "Git", "Modularization", "Performance", "Security", "Encryption", "Biometric",
+        "Fintech", "Banking", "Payments", "eWallet", "React Native", "Flutter", "Swift",
+        "Spring Boot", "Microservices", "AWS", "GCP", "Docker", "Kubernetes", "Agile", "Scrum"
     )
 
     val popularMalaysiaLocations = listOf(
@@ -144,10 +184,10 @@ object MalaysiaPresets {
             templateText = "Hi [Recruiter Name], thank you so much for the offer to join [Company] as [Role]! I am very excited about the team. Looking at the total annual package, my current employer contributes 16% to Employer EPF plus fixed allowances. To make the transition neutral on retirement and net take-home pay, would [Company] be open to adjusting the monthly base salary to RM [Target Base] or adding a sign-on bonus of RM [Amount]? Looking forward to your thoughts!"
         ),
         NegotiationScriptTemplate(
-            title = "Counter-Offer: Unvested Bonus / Increment Buyout",
-            category = "Salary Negotiation",
-            scenario = "Leaving right before your annual performance bonus payout in Q1/Q2.",
-            templateText = "Hi [Recruiter Name], I'm thrilled about the offer from [Company]. Because joining in [Month] means forfeiting my upcoming [X]-month performance bonus at my current company, could we explore a one-off sign-on bonus of RM [Amount] or bumping the base salary to RM [Target Base] to bridge that gap? If we can align on this, I am ready to sign right away."
+            title = "Counter-Offer: Notice Period Buyout / Unvested Bonus",
+            category = "Buyout & Bonus",
+            scenario = "Your current company requires a 2–3 month notice period or you are forfeiting an upcoming bonus.",
+            templateText = "Hi [Recruiter Name], I'm thrilled about the offer from [Company]. My current notice period is [2/3] months (or requires a RM [Amount] short-notice buyout to join earlier on [Target Date]). Could we explore a one-off sign-on / buyout bonus of RM [Amount] so I can onboard smoothly on your preferred start date? If we can align on this, I am ready to sign right away."
         ),
         NegotiationScriptTemplate(
             title = "Polite Follow-Up (10+ Days After Interview / Application)",

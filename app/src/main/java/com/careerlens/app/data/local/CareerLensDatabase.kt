@@ -110,7 +110,7 @@ interface CareerLensDao {
         JobOfferEntity::class,
         CurrencyRateEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(CareerLensConverters::class)
@@ -127,7 +127,9 @@ abstract class CareerLensDatabase : RoomDatabase() {
                     context.applicationContext,
                     CareerLensDatabase::class.java,
                     "careerlens_offline.db"
-                ).build()
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 CoroutineScope(Dispatchers.IO).launch {
                     seedInitialDataIfEmpty(instance.dao())
@@ -136,11 +138,6 @@ abstract class CareerLensDatabase : RoomDatabase() {
             }
         }
 
-        /**
-         * Seeds currency presets and realistic Malaysian tech/finance job applications,
-         * interviews, and offers on first launch so the user can immediately explore
-         * the Kanban pipeline, Interview Agenda, and Malaysia EPF/Salary Comparison charts.
-         */
         private suspend fun seedInitialDataIfEmpty(dao: CareerLensDao) {
             val existingCurrencies = dao.observeCurrencyRates().first()
             if (existingCurrencies.isEmpty()) {
@@ -177,7 +174,7 @@ abstract class CareerLensDatabase : RoomDatabase() {
                     jobPortalSource = "LinkedIn",
                     recruiterName = "Aisyah Rahman",
                     recruiterContact = "aisyah.r@grab.com",
-                    notes = "Great regional mobility fintech team at First Avenue PJ. Hybrid 3 days onsite, strong RSU package and GrabFlex benefits.",
+                    notes = "Regional mobility fintech team at First Avenue PJ. Hybrid 3 days onsite, strong RSU package and GrabFlex benefits. Keywords: Kotlin, Jetpack Compose, Coroutines, Clean Architecture, Modularization, CI/CD.",
                     priorityRating = 5,
                     appliedDateEpoch = now - (18 * dayMs),
                     updatedAtEpoch = now - (1 * dayMs)
@@ -198,7 +195,7 @@ abstract class CareerLensDatabase : RoomDatabase() {
                     jobPortalSource = "JobStreet MY",
                     recruiterName = "Daniel Tan",
                     recruiterContact = "+6012-345 6789",
-                    notes = "Employer EPF contribution is 16%! Guaranteed 2.5+ months average performance bonus & medical coverage.",
+                    notes = "Employer EPF contribution is 16%! Guaranteed 2.5+ months average performance bonus & medical coverage. Keywords: Kotlin, Android, Banking, Security, Biometric, Encryption, MVVM.",
                     priorityRating = 5,
                     appliedDateEpoch = now - (22 * dayMs),
                     updatedAtEpoch = now - (2 * dayMs)
@@ -218,7 +215,7 @@ abstract class CareerLensDatabase : RoomDatabase() {
                     salaryMaxMonthly = 7200.0,
                     jobPortalSource = "LinkedIn",
                     recruiterName = "Chloe Lim",
-                    notes = "Offer in SGD (S$6,500/mo). Compare purchasing power and Singapore tax vs staying in KL with EPF.",
+                    notes = "Offer in SGD (S$6,500/mo). Compare purchasing power after SG rental (S$1,400/mo room) vs staying in KL with EPF.",
                     priorityRating = 4,
                     appliedDateEpoch = now - (25 * dayMs),
                     updatedAtEpoch = now - (3 * dayMs)
@@ -276,29 +273,32 @@ abstract class CareerLensDatabase : RoomDatabase() {
                     salaryMinMonthly = 10000.0,
                     salaryMaxMonthly = 13500.0,
                     jobPortalSource = "JobStreet MY",
-                    notes = "Applied via JobStreet screenshot OCR.",
+                    notes = "Applied via JobStreet screenshot OCR. Keywords: Fintech, eWallet, Kotlin, Jetpack Compose, Security.",
                     priorityRating = 4,
-                    appliedDateEpoch = now - (3 * dayMs),
-                    updatedAtEpoch = now - (3 * dayMs)
+                    appliedDateEpoch = now - (11 * dayMs),
+                    updatedAtEpoch = now - (11 * dayMs)
                 )
             )
 
-            // Seed Offers for Grab, Maybank, and Shopee SG
+            // Seed Offers for Grab, Maybank, and Shopee SG (including v3.0 4-Year Vesting & COL Living Presets)
             dao.upsertOffer(
                 JobOfferEntity(
                     applicationId = grabId,
                     currencyCode = "MYR",
                     monthlyBaseSalary = 12800.0,
-                    monthlyFixedAllowance = 600.0, // GrabFlex + Mobile/Internet allowance
+                    monthlyFixedAllowance = 600.0,
                     contractualBonusMonths = 0.0,
                     targetPerformanceBonusMonths = 2.0,
-                    signOnBonusOneOff = 5000.0,
-                    annualizedEquityValue = 18000.0, // RSU grant per year in MYR
+                    signOnBonusOneOff = 6000.0,
+                    annualizedEquityValue = 18000.0,
+                    vestingSchedule = "25,25,25,25",
                     employeeEpfPercent = 11.0,
                     employerEpfPercent = 12.0,
                     includeSocsoEisAndPcbEstimate = true,
                     onsiteDaysPerWeek = 3,
-                    estimatedMonthlyCommuteCostMyr = 320.0, // LDP toll + PJ parking
+                    estimatedMonthlyCommuteCostMyr = 320.0,
+                    estimatedMonthlyRentAndLivingMyr = 2200.0,
+                    livingPresetLabel = "KL / PJ (Room Rental)",
                     annualLeaveDays = 18,
                     annualMedicalBenefitValue = 4000.0,
                     workLifeBalanceScore = 8,
@@ -318,11 +318,14 @@ abstract class CareerLensDatabase : RoomDatabase() {
                     targetPerformanceBonusMonths = 2.5,
                     signOnBonusOneOff = 0.0,
                     annualizedEquityValue = 0.0,
+                    vestingSchedule = "25,25,25,25",
                     employeeEpfPercent = 11.0,
-                    employerEpfPercent = 16.0, // Banking union/executive perk: 16% Employer EPF!
+                    employerEpfPercent = 16.0, // 16% Employer EPF compounds strongly over 4 years!
                     includeSocsoEisAndPcbEstimate = true,
                     onsiteDaysPerWeek = 3,
-                    estimatedMonthlyCommuteCostMyr = 150.0, // LRT/MRT My50 + occasional grab to KL Sentral
+                    estimatedMonthlyCommuteCostMyr = 150.0,
+                    estimatedMonthlyRentAndLivingMyr = 2200.0,
+                    livingPresetLabel = "KL / PJ (Room Rental)",
                     annualLeaveDays = 21,
                     annualMedicalBenefitValue = 5000.0,
                     workLifeBalanceScore = 9,
@@ -341,18 +344,21 @@ abstract class CareerLensDatabase : RoomDatabase() {
                     contractualBonusMonths = 0.0,
                     targetPerformanceBonusMonths = 2.0,
                     signOnBonusOneOff = 2000.0,
-                    annualizedEquityValue = 4000.0, // in SGD
+                    annualizedEquityValue = 4500.0, // in SGD
+                    vestingSchedule = "10,20,30,40",
                     employeeEpfPercent = 0.0, // Work Pass (EP) in SG has 0% CPF
                     employerEpfPercent = 0.0,
                     includeSocsoEisAndPcbEstimate = true,
                     onsiteDaysPerWeek = 5,
-                    estimatedMonthlyCommuteCostMyr = 450.0, // MRT + SG transport converted to MYR
+                    estimatedMonthlyCommuteCostMyr = 450.0,
+                    estimatedMonthlyRentAndLivingMyr = 7600.0, // ~S$1,400 room + S$900 SG food/living in MYR
+                    livingPresetLabel = "Singapore (Common Room)",
                     annualLeaveDays = 15,
                     annualMedicalBenefitValue = 3000.0,
                     workLifeBalanceScore = 6,
                     careerGrowthScore = 9,
                     offerDeadlineEpoch = now + (10 * dayMs),
-                    offerNotes = "High currency multiplier (SGD -> MYR), no EPF for EP holders, higher SG rental if relocating."
+                    offerNotes = "High currency multiplier (SGD -> MYR), back-loaded RSU, higher SG rental if relocating."
                 )
             )
 
@@ -366,7 +372,7 @@ abstract class CareerLensDatabase : RoomDatabase() {
                     durationMins = 30,
                     interviewerNames = "Farah Nadia (Talent Acquisition)",
                     formatOrLink = "Microsoft Teams",
-                    prepChecklist = "Expected salary range RM 12k-15k, notice period 1 month",
+                    prepChecklist = "Expected salary range RM 12k-15k, notice period 2 months",
                     questionsAsked = "Walk through current Android architecture experience, team size, notice period.",
                     confidenceScore = 5,
                     isCompleted = true
@@ -377,7 +383,7 @@ abstract class CareerLensDatabase : RoomDatabase() {
                     applicationId = petronasId,
                     roundNumber = 2,
                     roundType = InterviewRoundType.SYSTEM_DESIGN,
-                    scheduledAtEpoch = now + (1 * dayMs) + 14_400_000L, // Tomorrow
+                    scheduledAtEpoch = now + (1 * dayMs) + 14_400_000L,
                     durationMins = 60,
                     interviewerNames = "Irwan Syah (Principal Architect) & Mei Ling",
                     formatOrLink = "Microsoft Teams • KLCC Tower 1",

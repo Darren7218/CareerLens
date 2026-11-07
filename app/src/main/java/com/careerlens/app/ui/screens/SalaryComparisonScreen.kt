@@ -28,17 +28,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Savings
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -64,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -78,6 +79,7 @@ import com.careerlens.app.data.local.JobOfferEntity
 import com.careerlens.app.domain.calculator.MalaysiaCompCalculator
 import com.careerlens.app.domain.calculator.OfferComparisonResult
 import com.careerlens.app.domain.model.CurrentJobBaselineProfile
+import com.careerlens.app.domain.model.MalaysiaPresets
 import com.careerlens.app.ui.components.CompanyMonogramAvatar
 import com.careerlens.app.ui.components.formatCompactNumber
 import com.careerlens.app.ui.components.formatCurrencyAmount
@@ -114,6 +116,9 @@ fun SalaryComparisonScreen(
     // v2.0 Live What-If Counter-Offer Simulator Delta (in Offer Currency)
     var counterOfferDeltaMonthly by remember { mutableFloatStateOf(0f) }
 
+    // v3.0 Toggle between Year-1 Stacked Package Chart vs 4-Year Cumulative Wealth & EPF Chart
+    var showFourYearWealthMode by remember { mutableStateOf(false) }
+
     val createPdfLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri: Uri? ->
@@ -124,7 +129,6 @@ fun SalaryComparisonScreen(
 
     val currencyMap = remember(currencies) { currencies.associateBy { it.code } }
 
-    // Apply live counter-offer delta to all offers if slider is non-zero
     val displayedOffers = remember(evaluatedOffers, counterOfferDeltaMonthly, currencyMap, displayCurrencyCode, currentBaseline) {
         if (counterOfferDeltaMonthly == 0f) {
             evaluatedOffers
@@ -144,8 +148,8 @@ fun SalaryComparisonScreen(
         }
     }
 
-    val highestTcOffer = displayedOffers.maxByOrNull { it.annualTotalCompensationPackage }
-    val highestDisposableOffer = displayedOffers.maxByOrNull { it.monthlyTrueDisposablePay }
+    val highestFourYearOffer = displayedOffers.maxByOrNull { it.fourYearCumulativeWealth }
+    val highestSavingsAfterLivingOffer = displayedOffers.maxByOrNull { it.monthlyTrueNetSavingsAfterLiving }
 
     LazyColumn(
         modifier = Modifier
@@ -163,11 +167,11 @@ fun SalaryComparisonScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Offer & Salary Studio",
+                        text = "Offer & 4-Yr Wealth Studio",
                         style = MaterialTheme.typography.headlineMedium
                     )
                     Text(
-                        text = "Increment % vs Current Job, EPF, LHDN Tax & Counter-Offer Simulator",
+                        text = "KWSP 3-Account Dividend, SG/KL Rent COL & Counter-Offer Matrix",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -233,7 +237,7 @@ fun SalaryComparisonScreen(
             }
         }
 
-        // 2. v2.0 Current Job Baseline & LHDN Tax Relief Banner
+        // 2. Current Job Baseline, KWSP Dividend % & LHDN Tax Relief Banner
         item {
             Card(
                 modifier = Modifier
@@ -262,7 +266,7 @@ fun SalaryComparisonScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "MY CURRENT JOB BASELINE & LHDN RELIEFS",
+                                text = "CURRENT JOB BASELINE • KWSP ${String.format(Locale.US, "%.1f%%", currentBaseline.expectedEpfDividendPercent)} DIV",
                                 style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
                                 color = CyanInterview
                             )
@@ -273,7 +277,7 @@ fun SalaryComparisonScreen(
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
-                            text = "Employer EPF ${currentBaseline.employerEpfPercent.toInt()}% • Extra Tax Relief RM ${formatCurrencyAmount(currentBaseline.additionalTaxReliefsMyr)} • Zakat RM ${formatCurrencyAmount(currentBaseline.annualZakatRebateMyr)}",
+                            text = "EPF ${currentBaseline.employerEpfPercent.toInt()}% • Notice ${currentBaseline.currentNoticePeriodMonths}m • Reliefs RM ${formatCurrencyAmount(currentBaseline.additionalTaxReliefsMyr)}",
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -283,7 +287,7 @@ fun SalaryComparisonScreen(
                         color = CyanInterview.copy(alpha = 0.16f)
                     ) {
                         Text(
-                            text = "Edit Baseline",
+                            text = "Configure",
                             style = MaterialTheme.typography.labelMedium,
                             color = CyanInterview,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
@@ -293,7 +297,7 @@ fun SalaryComparisonScreen(
             }
         }
 
-        // 3. v2.0 Live What-If Counter-Offer Simulator Bar
+        // 3. Live What-If Counter-Offer Simulator Bar
         if (displayedOffers.isNotEmpty()) {
             item {
                 Card(
@@ -331,7 +335,7 @@ fun SalaryComparisonScreen(
                             )
                         }
                         Text(
-                            text = "Drag during recruiter calls to see instant Net Take-Home, EPF & PCB Tax impact:",
+                            text = "Drag during recruiter calls to see instant Net Take-Home, 4-Yr KWSP & PCB Tax impact:",
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -345,22 +349,67 @@ fun SalaryComparisonScreen(
                 }
             }
 
-            // 4. Stacked Annual Total Compensation Chart (Compose Canvas)
+            // 4. v3.0 Chart Switcher: Year-1 Stacked Package vs 4-Year Cumulative Wealth & Compounded KWSP
             item {
-                StackedCompensationChartCard(
-                    evaluatedOffers = displayedOffers,
-                    displaySymbol = displayCurrencySymbol,
-                    isSalaryMasked = isSalaryMasked
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = !showFourYearWealthMode,
+                        onClick = { showFourYearWealthMode = false },
+                        label = {
+                            Text(
+                                "Year-1 Package Breakdown",
+                                fontWeight = if (!showFourYearWealthMode) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = ElectricIndigo.copy(alpha = 0.22f),
+                            selectedLabelColor = ElectricIndigo
+                        )
+                    )
+                    FilterChip(
+                        selected = showFourYearWealthMode,
+                        onClick = { showFourYearWealthMode = true },
+                        label = {
+                            Text(
+                                "4-Year Wealth & KWSP Dividend",
+                                fontWeight = if (showFourYearWealthMode) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = EmeraldOffer.copy(alpha = 0.22f),
+                            selectedLabelColor = EmeraldOffer
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (!showFourYearWealthMode) {
+                    StackedCompensationChartCard(
+                        evaluatedOffers = displayedOffers,
+                        displaySymbol = displayCurrencySymbol,
+                        isSalaryMasked = isSalaryMasked
+                    )
+                } else {
+                    FourYearCumulativeWealthCard(
+                        evaluatedOffers = displayedOffers,
+                        displaySymbol = displayCurrencySymbol,
+                        dividendPct = currentBaseline.expectedEpfDividendPercent,
+                        isSalaryMasked = isSalaryMasked
+                    )
+                }
             }
 
-            // 5. Winner Insight Callout Banner
+            // 5. v3.0 Winner Insight Callout Banner (4-Year Total Wealth Winner + True Savings After Rent/Living Winner)
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    if (highestTcOffer != null) {
+                    if (highestFourYearOffer != null) {
                         Card(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
@@ -379,20 +428,20 @@ fun SalaryComparisonScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "HIGHEST TOTAL PACKAGE",
+                                        text = "BEST 4-YR WEALTH + EPF",
                                         style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
                                         color = EmeraldOffer
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = highestTcOffer.application.companyName,
+                                    text = highestFourYearOffer.application.companyName,
                                     style = MaterialTheme.typography.titleMedium,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "$displayCurrencySymbol ${formatCurrencyAmount(highestTcOffer.annualTotalCompensationPackage, isSalaryMasked)} / yr",
+                                    text = "$displayCurrencySymbol ${formatCurrencyAmount(highestFourYearOffer.fourYearCumulativeWealth, isSalaryMasked)} (4-Yr)",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = EmeraldOffer,
                                     fontWeight = FontWeight.Bold
@@ -401,7 +450,7 @@ fun SalaryComparisonScreen(
                         }
                     }
 
-                    if (highestDisposableOffer != null) {
+                    if (highestSavingsAfterLivingOffer != null) {
                         Card(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
@@ -420,20 +469,20 @@ fun SalaryComparisonScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "BEST MONTHLY NET CASH",
+                                        text = "BEST NET SAVINGS (AFTER RENT)",
                                         style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
                                         color = CyanInterview
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = highestDisposableOffer.application.companyName,
+                                    text = highestSavingsAfterLivingOffer.application.companyName,
                                     style = MaterialTheme.typography.titleMedium,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "$displayCurrencySymbol ${formatCurrencyAmount(highestDisposableOffer.monthlyTrueDisposablePay, isSalaryMasked)} / mo",
+                                    text = "$displayCurrencySymbol ${formatCurrencyAmount(highestSavingsAfterLivingOffer.monthlyTrueNetSavingsAfterLiving, isSalaryMasked)} / mo",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = CyanInterview,
                                     fontWeight = FontWeight.Bold
@@ -509,7 +558,6 @@ fun SalaryComparisonScreen(
         }
     }
 
-    // Modal 1: Edit Offer Compensation Details
     if (editingOffer != null) {
         EditMalaysiaOfferDialog(
             companyName = editingOfferCompany,
@@ -523,7 +571,6 @@ fun SalaryComparisonScreen(
         )
     }
 
-    // Modal 2: Edit User's Current Job Baseline & LHDN Tax Reliefs
     if (showBaselineModal) {
         EditCurrentBaselineDialog(
             initialBaseline = currentBaseline,
@@ -536,7 +583,6 @@ fun SalaryComparisonScreen(
         )
     }
 
-    // Modal 3: Pick an Application to attach a new Offer to
     if (showAddOfferPicker) {
         AlertDialog(
             onDismissRequest = { showAddOfferPicker = false },
@@ -589,7 +635,6 @@ fun SalaryComparisonScreen(
         )
     }
 
-    // Modal 4: Offline Currency Exchange Rate Editor
     if (showCurrencyRateModal) {
         CurrencyExchangeEditorDialog(
             currencies = currencies,
@@ -617,11 +662,11 @@ private fun StackedCompensationChartCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Annual Total Package Breakdown ($displaySymbol)",
+                text = "Year-1 Total Package Breakdown ($displaySymbol)",
                 style = MaterialTheme.typography.titleLarge
             )
             Text(
-                text = "Base + Fixed Allowances + Bonus + Employer EPF + RSU/Sign-On",
+                text = "Base + Fixed Allowances + Bonus + Employer EPF + Year-1 Vested Equity/Sign-On",
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -698,6 +743,100 @@ private fun StackedCompensationChartCard(
     }
 }
 
+/**
+ * v3.0 4-Year Cumulative Wealth & KWSP (EPF) Compounded Dividend Projector Card.
+ */
+@Composable
+private fun FourYearCumulativeWealthCard(
+    evaluatedOffers: List<OfferComparisonResult>,
+    displaySymbol: String,
+    dividendPct: Double,
+    isSalaryMasked: Boolean
+) {
+    val maxFourYr = max(1.0, evaluatedOffers.maxOfOrNull { it.fourYearCumulativeWealth } ?: 1.0)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
+        ),
+        border = BorderStroke(1.dp, EmeraldOffer.copy(alpha = 0.45f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.AccountBalanceWallet,
+                    contentDescription = null,
+                    tint = EmeraldOffer,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "4-Year Cumulative Wealth & KWSP (${String.format(Locale.US, "%.1f%%", dividendPct)} p.a.)",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+            Text(
+                text = "4-Yr Net Disposable Cash + Vested RSU Schedule + Compounded Employee & Employer KWSP",
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            evaluatedOffers.forEach { res ->
+                val pct = (res.fourYearCumulativeWealth / maxFourYr).toFloat().coerceIn(0.05f, 1f)
+                Column(modifier = Modifier.padding(vertical = 7.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "${res.application.companyName} (Vest: ${res.offer.vestingSchedule})",
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp)
+                        )
+                        Text(
+                            text = "$displaySymbol ${formatCurrencyAmount(res.fourYearCumulativeWealth, isSalaryMasked)}",
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp),
+                            color = EmeraldOffer,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                    Text(
+                        text = "4-Yr KWSP Pot: $displaySymbol ${formatCurrencyAmount(res.fourYearCompoundedEpfBalance, isSalaryMasked)} • Akaun 3 (Fleksi 10%): $displaySymbol ${formatCurrencyAmount(res.annualEpfAccount3Fleksi, isSalaryMasked)}/yr",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
+                        color = CyanInterview
+                    )
+                    Spacer(modifier = Modifier.height(5.dp))
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(14.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.5f))
+                    ) {
+                        val epfShare = (res.fourYearCompoundedEpfBalance / max(1.0, res.fourYearCumulativeWealth)).toFloat().coerceIn(0f, 1f)
+                        val totalBarWidth = size.width * pct
+                        val cashAndEquityWidth = totalBarWidth * (1f - epfShare)
+                        drawRoundRect(
+                            color = ElectricIndigo,
+                            topLeft = Offset.Zero,
+                            size = Size(cashAndEquityWidth, size.height),
+                            cornerRadius = CornerRadius(7f, 7f)
+                        )
+                        drawRect(
+                            color = EmeraldOffer,
+                            topLeft = Offset(cashAndEquityWidth, 0f),
+                            size = Size(totalBarWidth - cashAndEquityWidth, size.height)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun LegendDot(label: String, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -728,7 +867,7 @@ private fun DetailedOfferComparisonCard(
     val isPositiveJump = result.netMonthlyDeltaVsCurrent >= 0
 
     Card(
-        modifier = Modifier.width(310.dp),
+        modifier = Modifier.width(315.dp),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
@@ -781,7 +920,7 @@ private fun DetailedOfferComparisonCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // v2.0 Net Jump vs Current Baseline Pill
+            // Net Jump vs Current Baseline Pill
             val jumpColor = if (isPositiveJump) EmeraldOffer else RoseRejected
             val deltaSign = if (isPositiveJump) "+" else ""
             Surface(
@@ -811,7 +950,7 @@ private fun DetailedOfferComparisonCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Primary Hero Metric: Monthly Net Take-Home & True Disposable After Commute
+            // Primary Hero Metric: Monthly Net Take-Home & True Savings After Rent/Living
             Surface(
                 shape = RoundedCornerShape(14.dp),
                 color = EmeraldOffer.copy(alpha = 0.12f),
@@ -829,9 +968,15 @@ private fun DetailedOfferComparisonCard(
                         color = EmeraldOffer
                     )
                     Text(
-                        text = "After Commute (${offer.onsiteDaysPerWeek}d onsite): $sym ${formatCurrencyAmount(result.monthlyTrueDisposablePay, isSalaryMasked)}/mo",
+                        text = "After Commute: $sym ${formatCurrencyAmount(result.monthlyTrueDisposablePay, isSalaryMasked)}/mo",
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Net Savings After Rent (${offer.livingPresetLabel.substringBefore(" (")}): $sym ${formatCurrencyAmount(result.monthlyTrueNetSavingsAfterLiving, isSalaryMasked)}/mo",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
+                        color = CyanInterview,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -848,6 +993,11 @@ private fun DetailedOfferComparisonCard(
                 "Est. PCB Tax + SOCSO/EIS",
                 "- $sym ${formatCurrencyAmount(result.monthlyEstimatedPcbTax + result.monthlySocsoEisDeduction, isSalaryMasked)}",
                 valueColor = RoseRejected
+            )
+            MetricLine(
+                "Est. Rent + Food (${offer.livingPresetLabel.take(14)})",
+                "- $sym ${formatCurrencyAmount(result.monthlyRentAndLivingCost, isSalaryMasked)}",
+                valueColor = AmberAssessment
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
@@ -866,9 +1016,16 @@ private fun DetailedOfferComparisonCard(
                 "+ $sym ${formatCurrencyAmount(result.annualEmployerEpfContribution, isSalaryMasked)}",
                 valueColor = EmeraldOffer
             )
+            if (result.annualTotalEpfContribution > 0) {
+                MetricLine(
+                    "KWSP Akaun 3 (Fleksi 10%)",
+                    "$sym ${formatCurrencyAmount(result.annualEpfAccount3Fleksi, isSalaryMasked)} / yr",
+                    valueColor = CyanInterview
+                )
+            }
             if (result.annualEquityAndSignOn > 0) {
                 MetricLine(
-                    "RSU Equity + Sign-On / yr",
+                    "Year-1 RSU (${offer.vestingSchedule}) + Sign-On",
                     "+ $sym ${formatCurrencyAmount(result.annualEquityAndSignOn, isSalaryMasked)}",
                     valueColor = VioletWishlist
                 )
@@ -877,15 +1034,15 @@ private fun DetailedOfferComparisonCard(
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             MetricLine(
-                "TOTAL ANNUAL PACKAGE",
+                "YEAR-1 TOTAL PACKAGE",
                 "$sym ${formatCurrencyAmount(result.annualTotalCompensationPackage, isSalaryMasked)}",
                 valueColor = EmeraldOffer,
                 isBold = true
             )
             MetricLine(
-                "Annual Package Jump",
-                "$deltaSign$sym ${formatCurrencyAmount(result.annualPackageDeltaVsCurrent, isSalaryMasked)} (${String.format(Locale.US, "%+.1f%%", result.annualPackageJumpPercent)})",
-                valueColor = jumpColor,
+                "4-YR CUMULATIVE WEALTH",
+                "$sym ${formatCurrencyAmount(result.fourYearCumulativeWealth, isSalaryMasked)}",
+                valueColor = CyanInterview,
                 isBold = true
             )
             MetricLine(
@@ -906,7 +1063,7 @@ private fun DetailedOfferComparisonCard(
             ) {
                 Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Customize EPF, Bonus & Commute")
+                Text("Customize EPF, Vesting & Rent COL")
             }
         }
     }
@@ -956,13 +1113,15 @@ fun EditCurrentBaselineDialog(
     var commuteMyr by remember { mutableStateOf(initialBaseline.monthlyCommuteCostMyr.toInt().toString()) }
     var extraTaxReliefs by remember { mutableStateOf(initialBaseline.additionalTaxReliefsMyr.toInt().toString()) }
     var zakatRebate by remember { mutableStateOf(initialBaseline.annualZakatRebateMyr.toInt().toString()) }
+    var epfDividendText by remember { mutableStateOf(initialBaseline.expectedEpfDividendPercent.toString()) }
+    var noticeMonthsText by remember { mutableStateOf(initialBaseline.currentNoticePeriodMonths.toString()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("My Current Job Baseline & LHDN Tax Reliefs") },
+        title = { Text("Current Baseline, KWSP & Tax Profile") },
         text = {
             LazyColumn(
-                modifier = Modifier.height(430.dp),
+                modifier = Modifier.height(440.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 item {
@@ -1031,6 +1190,27 @@ fun EditCurrentBaselineDialog(
                 }
 
                 item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = epfDividendText,
+                            onValueChange = { epfDividendText = it },
+                            label = { Text("KWSP Dividend % (e.g. 5.8)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = noticeMonthsText,
+                            onValueChange = { noticeMonthsText = it },
+                            label = { Text("Notice Period (Mos)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                    }
+                }
+
+                item {
                     Text(
                         text = "Current EPF: ${employeeEpf.toInt()}% Employee / ${employerEpf.toInt()}% Employer",
                         style = MaterialTheme.typography.labelMedium,
@@ -1057,18 +1237,13 @@ fun EditCurrentBaselineDialog(
                         style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp),
                         color = CyanInterview
                     )
-                    Text(
-                        text = "Standard RM 15,500 (Individual 9k + EPF 4k + Lifestyle 2.5k) is already included.",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
 
                 item {
                     OutlinedTextField(
                         value = extraTaxReliefs,
                         onValueChange = { extraTaxReliefs = it },
-                        label = { Text("Extra LHDN Reliefs (Medical, Child, SSPN, Insurance) RM/yr") },
+                        label = { Text("Extra LHDN Reliefs (Medical, Child, SSPN) RM/yr") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
@@ -1091,7 +1266,7 @@ fun EditCurrentBaselineDialog(
             Button(
                 onClick = {
                     onSave(
-                        CurrentJobBaselineProfile(
+                        initialBaseline.copy(
                             currentRoleAndCompany = roleAndCompany.ifBlank { "Current Job" },
                             currencyCode = currencyCode,
                             monthlyBaseSalary = baseSalary.toDoubleOrNull() ?: 9800.0,
@@ -1101,12 +1276,14 @@ fun EditCurrentBaselineDialog(
                             employerEpfPercent = employerEpf,
                             monthlyCommuteCostMyr = commuteMyr.toDoubleOrNull() ?: 0.0,
                             additionalTaxReliefsMyr = extraTaxReliefs.toDoubleOrNull() ?: 0.0,
-                            annualZakatRebateMyr = zakatRebate.toDoubleOrNull() ?: 0.0
+                            annualZakatRebateMyr = zakatRebate.toDoubleOrNull() ?: 0.0,
+                            expectedEpfDividendPercent = epfDividendText.toDoubleOrNull() ?: 5.8,
+                            currentNoticePeriodMonths = noticeMonthsText.toIntOrNull() ?: 2
                         )
                     )
                 }
             ) {
-                Text("Save Baseline & Tax Profile")
+                Text("Save Profile")
             }
         },
         dismissButton = {
@@ -1131,12 +1308,15 @@ fun EditMalaysiaOfferDialog(
     var contractualBonus by remember { mutableStateOf(initialOffer.contractualBonusMonths.toString()) }
     var perfBonus by remember { mutableStateOf(initialOffer.targetPerformanceBonusMonths.toString()) }
     var equityAnnual by remember { mutableStateOf(initialOffer.annualizedEquityValue.toInt().toString()) }
+    var vestingSchedule by remember { mutableStateOf(initialOffer.vestingSchedule) }
     var signOn by remember { mutableStateOf(initialOffer.signOnBonusOneOff.toInt().toString()) }
     var employeeEpf by remember { mutableDoubleStateOf(initialOffer.employeeEpfPercent) }
     var employerEpf by remember { mutableDoubleStateOf(initialOffer.employerEpfPercent) }
     var includeTax by remember { mutableStateOf(initialOffer.includeSocsoEisAndPcbEstimate) }
     var onsiteDays by remember { mutableIntStateOf(initialOffer.onsiteDaysPerWeek) }
     var commuteCostMyr by remember { mutableStateOf(initialOffer.estimatedMonthlyCommuteCostMyr.toInt().toString()) }
+    var rentAndLivingMyr by remember { mutableStateOf(initialOffer.estimatedMonthlyRentAndLivingMyr.toInt().toString()) }
+    var livingPresetLabel by remember { mutableStateOf(initialOffer.livingPresetLabel) }
     var leaveDays by remember { mutableStateOf(initialOffer.annualLeaveDays.toString()) }
     var wlbScore by remember { mutableIntStateOf(initialOffer.workLifeBalanceScore) }
     var growthScore by remember { mutableIntStateOf(initialOffer.careerGrowthScore) }
@@ -1146,7 +1326,7 @@ fun EditMalaysiaOfferDialog(
         title = { Text("Offer Package: $companyName") },
         text = {
             LazyColumn(
-                modifier = Modifier.height(440.dp),
+                modifier = Modifier.height(450.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 item {
@@ -1235,6 +1415,19 @@ fun EditMalaysiaOfferDialog(
                 }
 
                 item {
+                    Text("4-Year RSU / Equity Vesting Schedule (%)", style = MaterialTheme.typography.labelMedium)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(MalaysiaPresets.vestingPresets) { (sched, label) ->
+                            FilterChip(
+                                selected = vestingSchedule == sched,
+                                onClick = { vestingSchedule = sched },
+                                label = { Text(label, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                }
+
+                item {
                     Text(
                         text = "EPF (KWSP) Rates — Employee: ${employeeEpf.toInt()}% | Employer: ${employerEpf.toInt()}%",
                         style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp),
@@ -1252,6 +1445,34 @@ fun EditMalaysiaOfferDialog(
                             )
                         }
                     }
+                }
+
+                item {
+                    Text(
+                        text = "Cross-Border Rent & Living Cost Preset (MY vs SG COL)",
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp),
+                        color = CyanInterview
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(MalaysiaPresets.livingCostPresets) { preset ->
+                            FilterChip(
+                                selected = livingPresetLabel == preset.label,
+                                onClick = {
+                                    livingPresetLabel = preset.label
+                                    rentAndLivingMyr = preset.monthlyCostMyr.toInt().toString()
+                                },
+                                label = { Text("${preset.label} (RM ${preset.monthlyCostMyr.toInt()})", fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = rentAndLivingMyr,
+                        onValueChange = { rentAndLivingMyr = it },
+                        label = { Text("Est. Monthly Rent + Food/Living Cost (in MYR equivalent)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
                 }
 
                 item {
@@ -1323,12 +1544,15 @@ fun EditMalaysiaOfferDialog(
                             contractualBonusMonths = contractualBonus.toDoubleOrNull() ?: 0.0,
                             targetPerformanceBonusMonths = perfBonus.toDoubleOrNull() ?: 0.0,
                             annualizedEquityValue = equityAnnual.toDoubleOrNull() ?: 0.0,
+                            vestingSchedule = vestingSchedule,
                             signOnBonusOneOff = signOn.toDoubleOrNull() ?: 0.0,
                             employeeEpfPercent = employeeEpf,
                             employerEpfPercent = employerEpf,
                             includeSocsoEisAndPcbEstimate = includeTax,
                             onsiteDaysPerWeek = onsiteDays,
                             estimatedMonthlyCommuteCostMyr = commuteCostMyr.toDoubleOrNull() ?: 0.0,
+                            estimatedMonthlyRentAndLivingMyr = rentAndLivingMyr.toDoubleOrNull() ?: 2200.0,
+                            livingPresetLabel = livingPresetLabel,
                             annualLeaveDays = leaveDays.toIntOrNull() ?: 16,
                             workLifeBalanceScore = wlbScore,
                             careerGrowthScore = growthScore

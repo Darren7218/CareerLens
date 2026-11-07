@@ -3,11 +3,14 @@ package com.careerlens.app.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.provider.CalendarContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -30,6 +33,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -60,6 +64,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
@@ -100,7 +105,6 @@ fun InterviewAgendaScreen(
     var showBackupModal by remember { mutableStateOf(false) }
     var exportedTextPreview by remember { mutableStateOf("") }
 
-    // v2.0 Android Storage Access Framework (SAF) Launchers for direct Downloads saving
     val saveJsonFileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri: Uri? ->
@@ -153,7 +157,7 @@ fun InterviewAgendaScreen(
                         style = MaterialTheme.typography.headlineMedium
                     )
                     Text(
-                        text = "Multi-round checklists, reflection logs & native Downloads file export",
+                        text = "1-Tap Phone Calendar sync, prep checklists & native Downloads file export",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -210,11 +214,16 @@ fun InterviewAgendaScreen(
         } else {
             items(upcoming, key = { it.id }) { round ->
                 val parentApp = appsById[round.applicationId]
+                val company = parentApp?.companyName ?: "Company"
+                val role = parentApp?.roleTitle ?: "Role"
                 InterviewRoundCard(
                     round = round,
-                    companyName = parentApp?.companyName ?: "Company",
-                    roleTitle = parentApp?.roleTitle ?: "Role",
+                    companyName = company,
+                    roleTitle = role,
                     onToggleComplete = { onToggleComplete(round) },
+                    onAddToSystemCalendar = {
+                        launchSystemCalendarIntent(context, round, company, role)
+                    },
                     onDelete = { onDeleteInterview(round) }
                 )
             }
@@ -231,17 +240,22 @@ fun InterviewAgendaScreen(
             }
             items(completed, key = { it.id }) { round ->
                 val parentApp = appsById[round.applicationId]
+                val company = parentApp?.companyName ?: "Company"
+                val role = parentApp?.roleTitle ?: "Role"
                 InterviewRoundCard(
                     round = round,
-                    companyName = parentApp?.companyName ?: "Company",
-                    roleTitle = parentApp?.roleTitle ?: "Role",
+                    companyName = company,
+                    roleTitle = role,
                     onToggleComplete = { onToggleComplete(round) },
+                    onAddToSystemCalendar = {
+                        launchSystemCalendarIntent(context, round, company, role)
+                    },
                     onDelete = { onDeleteInterview(round) }
                 )
             }
         }
 
-        // 4. v2.0 100% Offline Data Portability (Save to Downloads: PDF, JSON, CSV + Restore)
+        // 4. 100% Offline Data Portability (Save to Downloads: PDF, JSON, CSV + Restore)
         item {
             Spacer(modifier = Modifier.height(8.dp))
             Card(
@@ -393,6 +407,7 @@ private fun InterviewRoundCard(
     companyName: String,
     roleTitle: String,
     onToggleComplete: () -> Unit,
+    onAddToSystemCalendar: () -> Unit,
     onDelete: () -> Unit
 ) {
     val dateFormat = remember { SimpleDateFormat("EEE, dd MMM • hh:mm a", Locale.getDefault()) }
@@ -439,13 +454,42 @@ private fun InterviewRoundCard(
                         )
                     }
                 }
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        tint = RoseRejected.copy(alpha = 0.8f),
-                        modifier = Modifier.size(18.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // v3.0 1-Tap Add to Phone Calendar Button
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = ElectricIndigo.copy(alpha = 0.16f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onAddToSystemCalendar() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.EventAvailable,
+                                contentDescription = "Add to Phone Calendar",
+                                tint = ElectricIndigo,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Calendar",
+                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
+                                color = ElectricIndigo
+                            )
+                        }
+                    }
+
+                    IconButton(onClick = onDelete) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = RoseRejected.copy(alpha = 0.8f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
 
@@ -678,6 +722,36 @@ fun AddInterviewRoundDialog(
             }
         }
     )
+}
+
+/**
+ * v3.0 Launches Android's native System Calendar app (Google Calendar / Samsung Calendar)
+ * pre-populated with the interview title, duration, video call link, and prep checklist—100% offline.
+ */
+private fun launchSystemCalendarIntent(
+    context: Context,
+    round: InterviewRoundEntity,
+    companyName: String,
+    roleTitle: String
+) {
+    runCatching {
+        val endTime = round.scheduledAtEpoch + (round.durationMins * 60_000L)
+        val intent = Intent(Intent.ACTION_INSERT).apply {
+            data = CalendarContract.Events.CONTENT_URI
+            putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, round.scheduledAtEpoch)
+            putExtra(CalendarContract.EXTRA_EVENT_END_TIME, endTime)
+            putExtra(
+                CalendarContract.Events.TITLE,
+                "Interview: $companyName — ${round.roundType.label} ($roleTitle)"
+            )
+            putExtra(CalendarContract.Events.EVENT_LOCATION, round.formatOrLink)
+            putExtra(
+                CalendarContract.Events.DESCRIPTION,
+                "Interviewer(s): ${round.interviewerNames}\nPrep Checklist: ${round.prepChecklist}"
+            )
+        }
+        context.startActivity(intent)
+    }
 }
 
 private fun copyToClipboard(context: Context, label: String, text: String) {

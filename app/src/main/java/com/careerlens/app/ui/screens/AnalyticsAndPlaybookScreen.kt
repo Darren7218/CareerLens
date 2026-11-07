@@ -8,7 +8,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,10 +19,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Psychology
@@ -36,10 +38,12 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,33 +59,38 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.careerlens.app.data.local.JobApplicationEntity
+import com.careerlens.app.domain.model.CurrentJobBaselineProfile
 import com.careerlens.app.domain.model.JobStage
 import com.careerlens.app.domain.model.MalaysiaPresets
 import com.careerlens.app.domain.model.StarStoryItem
 import com.careerlens.app.ui.components.CompanyMonogramAvatar
+import com.careerlens.app.ui.components.formatCurrencyAmount
 import com.careerlens.app.ui.theme.AmberAssessment
 import com.careerlens.app.ui.theme.CyanInterview
 import com.careerlens.app.ui.theme.ElectricIndigo
 import com.careerlens.app.ui.theme.EmeraldOffer
 import com.careerlens.app.ui.theme.RoseRejected
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlin.math.max
 
 @Composable
 fun AnalyticsAndPlaybookScreen(
     applications: List<JobApplicationEntity>,
+    currentBaseline: CurrentJobBaselineProfile,
     starStories: List<StarStoryItem>,
     onSaveStarStory: (StarStoryItem) -> Unit,
     onShowToastMessage: (String) -> Unit
 ) {
     val context = LocalContext.current
-    var selectedSubTab by remember { mutableIntStateOf(0) } // 0 = Funnel & Radar, 1 = Negotiation Scripts, 2 = STAR Story Bank
+    var selectedSubTab by remember { mutableIntStateOf(0) } // 0 = Funnel, 1 = Notice & Buyout, 2 = Scripts, 3 = STAR Bank
     var showAddStarDialog by remember { mutableStateOf(false) }
 
     val now = System.currentTimeMillis()
@@ -102,27 +111,25 @@ fun AnalyticsAndPlaybookScreen(
         // 1. Header & Sub-Tab Switcher
         item {
             Text(
-                text = "Analytics & Negotiation Playbook",
+                text = "Analytics, Notice Buyout & Playbook",
                 style = MaterialTheme.typography.headlineMedium
             )
             Text(
-                text = "Pipeline Conversion Funnel, Portal ROI, Recruiter Scripts & STAR Stories",
+                text = "Funnel ROI, Malaysian Notice Period Buyout Math, Scripts & STAR Stories",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val tabs = listOf(
-                    "Funnel & Radar",
-                    "MY Scripts",
-                    "STAR Bank (${starStories.size})"
+                    0 to "Funnel & Radar",
+                    1 to "Notice & Buyout",
+                    2 to "MY Scripts",
+                    3 to "STAR Bank (${starStories.size})"
                 )
-                tabs.forEachIndexed { idx, title ->
+                items(tabs) { (idx, title) ->
                     val isSelected = selectedSubTab == idx
                     FilterChip(
                         selected = isSelected,
@@ -144,7 +151,6 @@ fun AnalyticsAndPlaybookScreen(
 
         when (selectedSubTab) {
             0 -> {
-                // Sub-Tab 0: Pipeline Conversion Funnel + Portal Callback ROI + Stale Radar
                 item {
                     ConversionFunnelCard(applications = applications)
                 }
@@ -164,7 +170,20 @@ fun AnalyticsAndPlaybookScreen(
             }
 
             1 -> {
-                // Sub-Tab 1: Malaysia Recruiter Negotiation & Counter-Offer Scripts
+                // v3.0 Sub-Tab 1: Malaysian Notice Period, Annual Leave Offset & Buyout Calculator
+                item {
+                    MalaysiaNoticeAndBuyoutCard(
+                        baseline = currentBaseline,
+                        onCopyBuyoutScript = { buyoutRm, earlyMonths ->
+                            val script = "Hi [Recruiter Name], I am very excited about joining [Company]! My current contractual notice period is ${currentBaseline.currentNoticePeriodMonths} month(s). To join earlier by $earlyMonths month(s), my short-notice buyout is RM ${formatCurrencyAmount(buyoutRm)}. Would [Company] be open to covering this via a sign-on bonus or buyout reimbursement so I can start on your target onboarding date?"
+                            copyText(context, "Notice Buyout Script", script)
+                            onShowToastMessage("Copied Notice Period Buyout request script!")
+                        }
+                    )
+                }
+            }
+
+            2 -> {
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -247,8 +266,7 @@ fun AnalyticsAndPlaybookScreen(
                 }
             }
 
-            2 -> {
-                // Sub-Tab 2: STAR Behavioral & Architecture Story Bank
+            3 -> {
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -389,6 +407,156 @@ fun AnalyticsAndPlaybookScreen(
                 }
             }
         )
+    }
+}
+
+/**
+ * v3.0 Malaysian Notice Period, Annual Leave Offset & Short-Notice Buyout Calculator.
+ */
+@Composable
+private fun MalaysiaNoticeAndBuyoutCard(
+    baseline: CurrentJobBaselineProfile,
+    onCopyBuyoutScript: (buyoutCostRm: Double, monthsBoughtOut: Int) -> Unit
+) {
+    var noticeMonths by remember { mutableIntStateOf(baseline.currentNoticePeriodMonths.coerceIn(1, 4)) }
+    var monthsToBuyout by remember { mutableIntStateOf(1) }
+    var unusedLeaveDays by remember { mutableIntStateOf(baseline.remainingAnnualLeaveDays.coerceIn(0, 30)) }
+    var currentGrossText by remember { mutableStateOf(baseline.monthlyBaseSalary.toInt().toString()) }
+    var offerSignOnText by remember { mutableStateOf("6000") }
+
+    val currentGross = currentGrossText.toDoubleOrNull() ?: baseline.monthlyBaseSalary
+    val offerSignOn = offerSignOnText.toDoubleOrNull() ?: 0.0
+    val actualBuyoutMonths = monthsToBuyout.coerceAtMost(noticeMonths)
+    val buyoutCostRm = currentGross * actualBuyoutMonths
+    val leaveEncashmentValueRm = (currentGross / 22.0) * unusedLeaveDays
+    val netTransitionCashPosition = offerSignOn + leaveEncashmentValueRm - buyoutCostRm
+
+    val dayMs = 86_400_000L
+    val servedMonths = (noticeMonths - actualBuyoutMonths).coerceAtLeast(0)
+    val officialLastDayEpoch = System.currentTimeMillis() + (servedMonths * 30L * dayMs)
+    val physicalLastDayEpoch = (officialLastDayEpoch - (unusedLeaveDays * dayMs)).coerceAtLeast(System.currentTimeMillis())
+    val df = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
+        ),
+        border = BorderStroke(1.dp, CyanInterview.copy(alpha = 0.45f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Calculate, contentDescription = null, tint = CyanInterview, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Notice Period, Leave Offset & Buyout Planner", style = MaterialTheme.typography.titleLarge)
+            }
+            Text(
+                text = "Calculate your Last Physical Working Day and check if a new offer's Sign-On Bonus covers a short-notice buyout (indemnity in lieu of notice under Malaysia Employment Act).",
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = currentGrossText,
+                    onValueChange = { currentGrossText = it },
+                    label = { Text("Current Monthly Gross (RM)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = offerSignOnText,
+                    onValueChange = { offerSignOnText = it },
+                    label = { Text("Offer Sign-On Bonus (RM)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+            }
+
+            Text("Contractual Notice Period: $noticeMonths Month(s)", style = MaterialTheme.typography.labelMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(1, 2, 3, 4).forEach { m ->
+                    FilterChip(
+                        selected = noticeMonths == m,
+                        onClick = {
+                            noticeMonths = m
+                            if (monthsToBuyout > m) monthsToBuyout = m
+                        },
+                        label = { Text("$m Mo") }
+                    )
+                }
+            }
+
+            Text("Months to Buy Out Early: $actualBuyoutMonths Month(s)", style = MaterialTheme.typography.labelMedium)
+            Slider(
+                value = actualBuyoutMonths.toFloat(),
+                onValueChange = { monthsToBuyout = it.toInt() },
+                valueRange = 0f..noticeMonths.toFloat(),
+                steps = (noticeMonths - 1).coerceAtLeast(0)
+            )
+
+            Text("Unused Annual Leave to Offset / Encash: $unusedLeaveDays Days", style = MaterialTheme.typography.labelMedium)
+            Slider(
+                value = unusedLeaveDays.toFloat(),
+                onValueChange = { unusedLeaveDays = it.toInt() },
+                valueRange = 0f..25f
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.background.copy(alpha = 0.6f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("If Resigning Today — Official Last Day:", style = MaterialTheme.typography.bodyMedium)
+                        Text(df.format(Date(officialLastDayEpoch)), fontWeight = FontWeight.Bold, color = CyanInterview)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Last Physical Day (After $unusedLeaveDays AL Offset):", style = MaterialTheme.typography.bodyMedium)
+                        Text(df.format(Date(physicalLastDayEpoch)), fontWeight = FontWeight.Bold, color = EmeraldOffer)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Buyout Cost ($actualBuyoutMonths mo):", style = MaterialTheme.typography.bodyMedium)
+                        Text("- RM ${formatCurrencyAmount(buyoutCostRm)}", fontWeight = FontWeight.Bold, color = RoseRejected)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("AL Encashment Value ($unusedLeaveDays days):", style = MaterialTheme.typography.bodyMedium)
+                        Text("+ RM ${formatCurrencyAmount(leaveEncashmentValueRm)}", fontWeight = FontWeight.Bold, color = AmberAssessment)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Net Cash After Sign-On + AL - Buyout:", style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp))
+                        val isSurplus = netTransitionCashPosition >= 0
+                        Text(
+                            text = "${if (isSurplus) "+" else ""}RM ${formatCurrencyAmount(netTransitionCashPosition)}",
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (isSurplus) EmeraldOffer else RoseRejected
+                        )
+                    }
+                }
+            }
+
+            OutlinedButton(
+                onClick = { onCopyBuyoutScript(buyoutCostRm, actualBuyoutMonths) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Copy Recruiter Buyout Reimbursement Script")
+            }
+        }
     }
 }
 

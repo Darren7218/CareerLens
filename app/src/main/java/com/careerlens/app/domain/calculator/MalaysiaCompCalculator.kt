@@ -9,7 +9,11 @@ import kotlin.math.min
 
 /**
  * Detailed Compensation Breakdown normalized into both the Offer's Original Currency
- * and the user's selected Display Currency (default MYR), plus v2.0 Increment % vs Current Job.
+ * and the user's selected Display Currency (default MYR), plus:
+ * - v2.0 Increment % vs Current Job
+ * - v3.0 4-Year Cumulative Wealth Trajectory (Cash + Vested Equity + Compounded KWSP)
+ * - v3.0 KWSP 3-Account Breakdown (75% Persaraan / 15% Sejahtera / 10% Fleksi)
+ * - v3.0 Cross-Border Cost-of-Living (Rent + Food) True Monthly Net Savings
  */
 data class OfferComparisonResult(
     val application: JobApplicationEntity,
@@ -25,17 +29,29 @@ data class OfferComparisonResult(
     val monthlyNetTakeHomePay: Double,
     val monthlyCommuteCost: Double,
     val monthlyTrueDisposablePay: Double, // Net Take-Home minus Commute Cost
+    // v3.0 Cost-of-Living (COL) Rent & Living Adjusted Monthly Savings
+    val monthlyRentAndLivingCost: Double,
+    val monthlyTrueNetSavingsAfterLiving: Double, // Disposable minus Rent & Living Cost
     // Annual Figures (in Display Currency)
     val annualBaseSalary: Double,
     val annualFixedAllowances: Double,
     val annualTotalBonus: Double,
     val annualEmployerEpfContribution: Double,
     val annualEquityAndSignOn: Double,
-    val annualTotalCompensationPackage: Double, // Base + Allowances + Bonus + Employer EPF + Equity + SignOn
+    val annualTotalCompensationPackage: Double,
     val annualNetAfterTaxAndCommute: Double,
+    // v3.0 KWSP (EPF) 3-Account Annual Contribution + 4-Year Compounded Balance
+    val annualTotalEpfContribution: Double, // Employee 11% + Employer 12-16%
+    val annualEpfAccount1Persaraan: Double, // 75% Retirement
+    val annualEpfAccount2Sejahtera: Double, // 15% Housing/Medical/Education
+    val annualEpfAccount3Fleksi: Double,    // 10% Anytime Withdrawal
+    val fourYearCompoundedEpfBalance: Double,
+    // v3.0 4-Year Cumulative Wealth Trajectory (Year 1, Year 2, Year 3, Year 4 cumulative totals)
+    val yearlyTotalCompByYear: List<Double>, // [Y1, Y2, Y3, Y4]
+    val fourYearCumulativeWealth: Double,    // Total 4-year Net Cash + Vested Equity + Compounded EPF
     // Effective Hourly & Personal Score
     val effectiveHourlyNetRate: Double,
-    val weightedDecisionScore: Int, // 0 to 100 composite score
+    val weightedDecisionScore: Int,
     // v2.0 Comparison against User's Current Job Baseline
     val netMonthlyDeltaVsCurrent: Double = 0.0,
     val netMonthlyJumpPercent: Double = 0.0,
@@ -45,10 +61,6 @@ data class OfferComparisonResult(
 
 object MalaysiaCompCalculator {
 
-    /**
-     * Evaluates the user's Current Job Baseline into Display Currency so every Offer can be
-     * compared directly against what the user currently earns.
-     */
     fun evaluateBaseline(
         baseline: CurrentJobBaselineProfile,
         currencyMap: Map<String, CurrencyRateEntity>,
@@ -67,7 +79,8 @@ object MalaysiaCompCalculator {
             targetPerformanceBonusMonths = baseline.annualBonusMonths,
             employeeEpfPercent = baseline.employeeEpfPercent,
             employerEpfPercent = baseline.employerEpfPercent,
-            estimatedMonthlyCommuteCostMyr = baseline.monthlyCommuteCostMyr
+            estimatedMonthlyCommuteCostMyr = baseline.monthlyCommuteCostMyr,
+            estimatedMonthlyRentAndLivingMyr = baseline.monthlyRentAndLivingMyr
         )
         val res = evaluateOfferInternal(
             application = syntheticApp,
@@ -75,15 +88,12 @@ object MalaysiaCompCalculator {
             currencyMap = currencyMap,
             displayCurrencyCode = displayCurrencyCode,
             additionalTaxReliefsMyr = baseline.additionalTaxReliefsMyr,
-            annualZakatRebateMyr = baseline.annualZakatRebateMyr
+            annualZakatRebateMyr = baseline.annualZakatRebateMyr,
+            epfDividendPercent = baseline.expectedEpfDividendPercent
         )
         return res.monthlyTrueDisposablePay to res.annualTotalCompensationPackage
     }
 
-    /**
-     * Computes Malaysian statutory deductions (EPF/KWSP, SOCSO/PERKESO, EIS, and progressive PCB Tax estimate)
-     * and converts all metrics into the chosen display currency using the user's offline exchange rate table.
-     */
     fun evaluateOffer(
         application: JobApplicationEntity,
         offer: JobOfferEntity,
@@ -103,7 +113,8 @@ object MalaysiaCompCalculator {
             currencyMap = currencyMap,
             displayCurrencyCode = displayCurrencyCode,
             additionalTaxReliefsMyr = baseline.additionalTaxReliefsMyr,
-            annualZakatRebateMyr = baseline.annualZakatRebateMyr
+            annualZakatRebateMyr = baseline.annualZakatRebateMyr,
+            epfDividendPercent = baseline.expectedEpfDividendPercent
         )
 
         val netDelta = raw.monthlyTrueDisposablePay - baselineMonthlyDisposable
@@ -126,7 +137,8 @@ object MalaysiaCompCalculator {
         currencyMap: Map<String, CurrencyRateEntity>,
         displayCurrencyCode: String,
         additionalTaxReliefsMyr: Double,
-        annualZakatRebateMyr: Double
+        annualZakatRebateMyr: Double,
+        epfDividendPercent: Double
     ): OfferComparisonResult {
         val offerRateToMyr = currencyMap[offer.currencyCode]?.rateToMyr ?: 1.0
         val displayCurrency = currencyMap[displayCurrencyCode]
@@ -146,7 +158,22 @@ object MalaysiaCompCalculator {
         // 1. Employee & Employer EPF (KWSP)
         val epfSubjectMonthlyMyr = monthlyBaseMyr + monthlyAmortizedBonusMyr
         val monthlyEmployeeEpfMyr = epfSubjectMonthlyMyr * (offer.employeeEpfPercent / 100.0)
+        val annualEmployeeEpfMyr = monthlyEmployeeEpfMyr * 12.0
         val annualEmployerEpfMyr = (epfSubjectMonthlyMyr * 12.0) * (offer.employerEpfPercent / 100.0)
+        val annualTotalEpfMyr = annualEmployeeEpfMyr + annualEmployerEpfMyr
+
+        // v3.0 KWSP 2024/2026 3-Account Allocation (75% Persaraan / 15% Sejahtera / 10% Fleksi)
+        val epfAcc1Myr = annualTotalEpfMyr * 0.75
+        val epfAcc2Myr = annualTotalEpfMyr * 0.15
+        val epfAcc3FleksiMyr = annualTotalEpfMyr * 0.10
+
+        // v3.0 4-Year Compounded KWSP Balance at expected dividend rate (default 5.8% p.a.)
+        val divRate = (epfDividendPercent / 100.0).coerceIn(0.0, 0.15)
+        var compoundedEpfMyr = 0.0
+        for (yr in 1..4) {
+            // Contributions made throughout the year earn ~half-year dividend in their deposit year, full dividend thereafter
+            compoundedEpfMyr = (compoundedEpfMyr * (1.0 + divRate)) + (annualTotalEpfMyr * (1.0 + divRate * 0.5))
+        }
 
         // 2. SOCSO (PERKESO) + EIS (SIP) — Capped at RM 6,000 monthly wage ceiling in Malaysia
         val monthlySocsoEisMyr = if (offer.includeSocsoEisAndPcbEstimate && offer.currencyCode == "MYR") {
@@ -162,7 +189,7 @@ object MalaysiaCompCalculator {
             if (offer.currencyCode == "MYR") {
                 estimateMalaysiaAnnualIncomeTaxMyr(
                     annualGrossMyr = annualGrossTaxableMyr,
-                    annualEmployeeEpfMyr = monthlyEmployeeEpfMyr * 12.0,
+                    annualEmployeeEpfMyr = annualEmployeeEpfMyr,
                     additionalReliefsMyr = additionalTaxReliefsMyr,
                     zakatRebateMyr = annualZakatRebateMyr
                 )
@@ -176,7 +203,7 @@ object MalaysiaCompCalculator {
         }
         val monthlyPcbTaxMyr = annualTaxMyr / 12.0
 
-        // 4. Monthly Net Take-Home & Disposable After Commute
+        // 4. Monthly Net Take-Home, Disposable After Commute & True Net Savings After Rent/Living
         val monthlyPayslipEmployeeEpfMyr = monthlyBaseMyr * (offer.employeeEpfPercent / 100.0)
         val monthlyGrossMyr = monthlyBaseMyr + monthlyAllowanceMyr
         val monthlyNetTakeHomeMyr = max(
@@ -185,11 +212,26 @@ object MalaysiaCompCalculator {
         )
         val monthlyCommuteMyr = if (offer.onsiteDaysPerWeek == 0) 0.0 else offer.estimatedMonthlyCommuteCostMyr
         val monthlyTrueDisposableMyr = max(0.0, monthlyNetTakeHomeMyr - monthlyCommuteMyr)
+        val monthlyRentLivingMyr = max(0.0, offer.estimatedMonthlyRentAndLivingMyr)
+        val monthlyTrueNetSavingsMyr = monthlyTrueDisposableMyr - monthlyRentLivingMyr
 
-        // 5. Annual Total Compensation Package
+        // 5. Annual Total Compensation & v3.0 4-Year Vesting Trajectory
         val annualBaseMyr = monthlyBaseMyr * 12.0
         val annualAllowanceMyr = monthlyAllowanceMyr * 12.0
-        val annualEquityAndSignOnMyr = toMyr(offer.annualizedEquityValue + offer.signOnBonusOneOff)
+        val signOnMyr = toMyr(offer.signOnBonusOneOff)
+        val annualEquityTargetMyr = toMyr(offer.annualizedEquityValue)
+        val fourYearTotalGrantMyr = annualEquityTargetMyr * 4.0
+
+        val vestWeights = parseVestingWeights(offer.vestingSchedule)
+        val yearlyTotalCompDisplay = (0..3).map { yrIdx ->
+            val vestedEquityThisYearMyr = fourYearTotalGrantMyr * (vestWeights[yrIdx] / 100.0)
+            val signOnThisYearMyr = if (yrIdx == 0) signOnMyr else 0.0
+            val totalYearMyr = annualBaseMyr + annualAllowanceMyr + annualBonusMyr + annualEmployerEpfMyr + vestedEquityThisYearMyr + signOnThisYearMyr
+            fromMyrToDisplay(totalYearMyr)
+        }
+
+        val year1EquityMyr = fourYearTotalGrantMyr * (vestWeights[0] / 100.0)
+        val annualEquityAndSignOnMyr = year1EquityMyr + signOnMyr
         val annualTotalPackageMyr =
             annualBaseMyr + annualAllowanceMyr + annualBonusMyr + annualEmployerEpfMyr + annualEquityAndSignOnMyr
 
@@ -197,7 +239,12 @@ object MalaysiaCompCalculator {
         val annualNetAfterTaxAndCommuteMyr =
             (monthlyTrueDisposableMyr * 12.0) + netBonusAfterEpfMyr + annualEquityAndSignOnMyr
 
-        // 6. Effective Hourly Rate (factoring in Annual Leave & Commute hours)
+        // 4-Year Cumulative Wealth = 4 yrs of Net Disposable Cash + 4 yrs Net Bonus + 4 yrs Vested Equity + SignOn + 4-Yr Compounded EPF
+        val fourYearNetCashAndBonusMyr = ((monthlyTrueDisposableMyr * 12.0) + netBonusAfterEpfMyr) * 4.0
+        val fourYearCumulativeWealthMyr =
+            fourYearNetCashAndBonusMyr + fourYearTotalGrantMyr + signOnMyr + compoundedEpfMyr
+
+        // 6. Effective Hourly Rate
         val workingWeeksPerYear = max(40.0, 52.0 - ((offer.annualLeaveDays + 11) / 5.0))
         val weeklyCommuteHours = offer.onsiteDaysPerWeek * 1.5
         val totalHoursPerYear = workingWeeksPerYear * (40.0 + weeklyCommuteHours)
@@ -223,6 +270,8 @@ object MalaysiaCompCalculator {
             monthlyNetTakeHomePay = fromMyrToDisplay(monthlyNetTakeHomeMyr),
             monthlyCommuteCost = fromMyrToDisplay(monthlyCommuteMyr),
             monthlyTrueDisposablePay = fromMyrToDisplay(monthlyTrueDisposableMyr),
+            monthlyRentAndLivingCost = fromMyrToDisplay(monthlyRentLivingMyr),
+            monthlyTrueNetSavingsAfterLiving = fromMyrToDisplay(monthlyTrueNetSavingsMyr),
             annualBaseSalary = fromMyrToDisplay(annualBaseMyr),
             annualFixedAllowances = fromMyrToDisplay(annualAllowanceMyr),
             annualTotalBonus = fromMyrToDisplay(annualBonusMyr),
@@ -230,16 +279,26 @@ object MalaysiaCompCalculator {
             annualEquityAndSignOn = fromMyrToDisplay(annualEquityAndSignOnMyr),
             annualTotalCompensationPackage = fromMyrToDisplay(annualTotalPackageMyr),
             annualNetAfterTaxAndCommute = fromMyrToDisplay(annualNetAfterTaxAndCommuteMyr),
+            annualTotalEpfContribution = fromMyrToDisplay(annualTotalEpfMyr),
+            annualEpfAccount1Persaraan = fromMyrToDisplay(epfAcc1Myr),
+            annualEpfAccount2Sejahtera = fromMyrToDisplay(epfAcc2Myr),
+            annualEpfAccount3Fleksi = fromMyrToDisplay(epfAcc3FleksiMyr),
+            fourYearCompoundedEpfBalance = fromMyrToDisplay(compoundedEpfMyr),
+            yearlyTotalCompByYear = yearlyTotalCompDisplay,
+            fourYearCumulativeWealth = fromMyrToDisplay(fourYearCumulativeWealthMyr),
             effectiveHourlyNetRate = fromMyrToDisplay(effectiveHourlyMyr),
             weightedDecisionScore = compositeScore
         )
     }
 
-    /**
-     * LHDN Malaysia Resident Progressive Income Tax Brackets (YA 2024/2025/2026)
-     * Includes standard RM 9,000 Individual Relief + up to RM 4,000 EPF Relief + RM 2,500 Lifestyle Relief
-     * + User's Custom Reliefs (Medical, SSPN, Child, Insurance) and 1:1 Zakat Tax Rebate.
-     */
+    private fun parseVestingWeights(schedule: String): List<Double> {
+        val parts = schedule.split(",").mapNotNull { it.trim().toDoubleOrNull() }
+        if (parts.size == 4 && parts.sum() > 0.0) {
+            return parts
+        }
+        return listOf(25.0, 25.0, 25.0, 25.0)
+    }
+
     private fun estimateMalaysiaAnnualIncomeTaxMyr(
         annualGrossMyr: Double,
         annualEmployeeEpfMyr: Double,

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Lens Ring (Electric Indigo) -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M52,50m-22,0a22,22 0,1 1,44 0a22,22 0,1 1,-44 0"
+        android:strokeWidth="5.5"
+        android:strokeColor="#6366F1" />
+    <!-- Lens Handle -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M68,66 L80,78"
+        android:strokeWidth="6.5"
+        android:strokeLineCap="round"
+        android:strokeColor="#6366F1" />
+    <!-- Ascending Compensation Bars Inside Lens (Emerald Mint & Cyan) -->
+    <path
+        android:fillColor="#06B6D4"
+        android:pathData="M41,58 L46,58 L46,49 L41,49 Z" />
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M49.5,58 L54.5,58 L54.5,43 L49.5,43 Z" />
+    <path
+        android:fillColor="#34D399"
+        android:pathData="M58,58 L63,58 L63,36 L58,36 Z" />
+</vector>

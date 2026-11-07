@@ -65,9 +65,9 @@ data class InterviewRoundEntity(
 )
 
 /**
- * Comprehensive Malaysian & Multi-Currency Offer Package Entity.
+ * Comprehensive Malaysian & Multi-Currency Offer Package Entity (v3.0).
  * Supports EPF (KWSP) custom employee/employer rates, contractual & performance bonuses,
- * fixed tax-exempt allowances, RSUs/ESOS, and Klang Valley / Penang / JB commute costs.
+ * fixed tax-exempt allowances, 4-year RSU/ESOS vesting schedules, and regional Rent/Living COL costs.
  */
 @Serializable
 @Entity(
@@ -94,8 +94,9 @@ data class JobOfferEntity(
     val contractualBonusMonths: Double = 0.0,
     val targetPerformanceBonusMonths: Double = 1.0,
     val signOnBonusOneOff: Double = 0.0,
-    // Equity / RSU / ESOS annualized value in offer currency
+    // Equity / RSU / ESOS annualized value in offer currency + v3.0 4-Year Vesting Schedule
     val annualizedEquityValue: Double = 0.0,
+    val vestingSchedule: String = "25,25,25,25", // e.g. "25,25,25,25" or "10,20,30,40"
     // Malaysian Statutory EPF (KWSP) Settings (Set to 0% for SGD/Foreign non-EPF offers if needed)
     val employeeEpfPercent: Double = 11.0,
     val employerEpfPercent: Double = 12.0, // 13% for <= RM5,000 or 15-16% for MNC/Bank perks
@@ -103,6 +104,9 @@ data class JobOfferEntity(
     // Work & Commute Reality (Toll + Petrol + Parking or LRT/MRT)
     val onsiteDaysPerWeek: Int = 3,
     val estimatedMonthlyCommuteCostMyr: Double = 350.0,
+    // v3.0 Regional Rent & Living Cost-of-Living (COL) Deductor in MYR equivalent/month
+    val estimatedMonthlyRentAndLivingMyr: Double = 2200.0,
+    val livingPresetLabel: String = "KL / PJ (Room Rental)",
     // Non-cash perks & personal weighted scoring
     val annualLeaveDays: Int = 16,
     val annualMedicalBenefitValue: Double = 2500.0,

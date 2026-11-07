@@ -55,7 +55,7 @@ import com.careerlens.app.ui.viewmodel.CareerLensViewModel
 
 private enum class BottomNavTab(val label: String, val icon: ImageVector) {
     PIPELINE("Pipeline", Icons.Default.WorkOutline),
-    OCR_SCANNER("OCR Scan", Icons.Default.DocumentScanner),
+    OCR_SCANNER("OCR & ATS", Icons.Default.DocumentScanner),
     SALARY_STUDIO("Salary & EPF", Icons.Default.Payments),
     PLAYBOOK("Playbook", Icons.Default.Insights),
     INTERVIEWS("Interviews", Icons.Default.CalendarMonth)
@@ -213,6 +213,10 @@ private fun CareerLensAppRoot(
                         isProcessing = isOcrProcessing,
                         availableCurrencies = uiState.currencies.map { it.code },
                         existingApplications = uiState.applications,
+                        userSkillsCsv = uiState.currentBaseline.userSkillsCsv,
+                        onSaveUserSkillsCsv = { updatedSkills ->
+                            viewModel.saveCurrentBaseline(uiState.currentBaseline.copy(userSkillsCsv = updatedSkills))
+                        },
                         onChangeOcrMode = viewModel::setOcrMode,
                         onPickScreenshotUri = viewModel::scanScreenshotUri,
                         onLoadSampleTemplate = viewModel::loadDemoMalaysiaJobScreenshotTemplate,
@@ -258,6 +262,7 @@ private fun CareerLensAppRoot(
                 BottomNavTab.PLAYBOOK -> {
                     AnalyticsAndPlaybookScreen(
                         applications = uiState.applications,
+                        currentBaseline = uiState.currentBaseline,
                         starStories = uiState.starStories,
                         onSaveStarStory = viewModel::saveStarStory,
                         onShowToastMessage = viewModel::postBannerMessage

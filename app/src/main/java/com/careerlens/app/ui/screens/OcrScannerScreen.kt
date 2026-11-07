@@ -38,8 +38,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -53,6 +56,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -88,6 +92,7 @@ import com.careerlens.app.ui.theme.AmberAssessment
 import com.careerlens.app.ui.theme.CyanInterview
 import com.careerlens.app.ui.theme.ElectricIndigo
 import com.careerlens.app.ui.theme.EmeraldOffer
+import kotlin.math.max
 
 private enum class AssignTargetField(val label: String, val color: Color) {
     ROLE("Role Title", ElectricIndigo),
@@ -107,6 +112,8 @@ fun OcrScannerScreen(
     isProcessing: Boolean,
     availableCurrencies: List<String>,
     existingApplications: List<JobApplicationEntity>,
+    userSkillsCsv: String,
+    onSaveUserSkillsCsv: (String) -> Unit,
     onChangeOcrMode: (OcrScanMode) -> Unit,
     onPickScreenshotUri: (Uri) -> Unit,
     onLoadSampleTemplate: (Int) -> Unit,
@@ -133,6 +140,7 @@ fun OcrScannerScreen(
     var activeTargetField by remember { mutableStateOf(AssignTargetField.ROLE) }
     var demoIndex by remember { mutableIntStateOf(0) }
     var lastTappedChipId by remember { mutableIntStateOf(-1) }
+    var showEditSkillsModal by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         if (parsedResult.fullRawText.isBlank() && screenshotUri == null) {
@@ -155,17 +163,45 @@ fun OcrScannerScreen(
     var portalText by remember(parsedResult) { mutableStateOf(parsedResult.detectedPortalSource) }
     var notesText by remember(parsedResult) { mutableStateOf(parsedResult.detectedNotes) }
 
-    // v2.0 Offer Letter Mode state
+    // Offer Letter Mode state
     var allowanceText by remember(parsedResult) { mutableStateOf(parsedResult.detectedAllowanceMonthly.toInt().toString()) }
     var bonusMonthsText by remember(parsedResult) { mutableStateOf(parsedResult.detectedBonusMonths.toString()) }
     var employerEpfText by remember(parsedResult) { mutableStateOf(parsedResult.detectedEmployerEpfPercent.toInt().toString()) }
     var leaveDaysText by remember(parsedResult) { mutableStateOf(parsedResult.detectedAnnualLeaveDays.toString()) }
 
-    // v2.0 Interview Invite Mode state
+    // Interview Invite Mode state
     var selectedRoundType by remember(parsedResult) { mutableStateOf(parsedResult.detectedInterviewRoundType) }
     var meetingLinkText by remember(parsedResult) { mutableStateOf(parsedResult.detectedMeetingLinkOrPlatform) }
     var selectedAppForInterview by remember(existingApplications) {
         mutableStateOf(existingApplications.firstOrNull())
+    }
+
+    // v3.0 Offline ATS Keyword Gap Analysis (Screenshot JD vs User's Skills Profile)
+    val atsAnalysis = remember(parsedResult.fullRawText, roleText, notesText, userSkillsCsv) {
+        val combinedJdText = "${parsedResult.fullRawText} $roleText $notesText".lowercase()
+        val userSkills = userSkillsCsv.split(",")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+        val userSkillsLower = userSkills.map { it.lowercase() }.toSet()
+
+        // Find all tech/domain keywords mentioned in the JD screenshot (plus any user skill mentioned)
+        val candidatePool = (MalaysiaPresets.commonTechAndDomainKeywords + userSkills).distinctBy { it.lowercase() }
+        val keywordsInJd = candidatePool.filter { kw ->
+            combinedJdText.contains(kw.lowercase())
+        }
+
+        val matched = keywordsInJd.filter { kw ->
+            userSkillsLower.any { u -> u.contains(kw.lowercase()) || kw.lowercase().contains(u) }
+        }
+        val missing = keywordsInJd.filterNot { kw ->
+            matched.any { m -> m.equals(kw, ignoreCase = true) }
+        }
+        val matchScore = if (keywordsInJd.isNotEmpty()) {
+            ((matched.size * 100) / max(1, keywordsInJd.size)).coerceIn(0, 100)
+        } else {
+            85
+        }
+        Triple(matchScore, matched, missing)
     }
 
     fun applyChipToActiveField(chip: OcrBlockChip) {
@@ -220,12 +256,12 @@ fun OcrScannerScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "3-Mode Screenshot OCR",
+                            text = "3-Mode OCR & ATS Matcher",
                             style = MaterialTheme.typography.headlineMedium
                         )
                     }
                     Text(
-                        text = "Interactive Bounding-Box Canvas + Persistent Offline Vault",
+                        text = "Interactive Bounding-Box Canvas + Offline Resume ATS Gap Analyzer",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -234,7 +270,7 @@ fun OcrScannerScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // v2.0 3-Mode OCR Switcher (Job Ad / Offer Letter / Interview Invite)
+            // 3-Mode OCR Switcher (Job Ad / Offer Letter / Interview Invite)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -305,7 +341,7 @@ fun OcrScannerScreen(
             }
         }
 
-        // 2. v2.0 Interactive Bounding-Box Screenshot Canvas
+        // 2. Interactive Bounding-Box Screenshot Canvas
         item {
             Card(
                 modifier = Modifier
@@ -323,7 +359,6 @@ fun OcrScannerScreen(
                             contentScale = ContentScale.FillBounds
                         )
                     } else {
-                        // Synthetic visual preview canvas when testing built-in Malaysia OCR Demo Templates
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -335,7 +370,6 @@ fun OcrScannerScreen(
                         )
                     }
 
-                    // Interactive Bounding Box Overlay — Tap any bounding box directly on the screenshot!
                     Canvas(
                         modifier = Modifier
                             .fillMaxSize()
@@ -383,7 +417,6 @@ fun OcrScannerScreen(
                         }
                     }
 
-                    // Overlay Text Labels when in Demo Preview Mode (no external photo bitmap)
                     if (screenshotUri == null) {
                         Column(
                             modifier = Modifier
@@ -410,7 +443,106 @@ fun OcrScannerScreen(
             }
         }
 
-        // 3. Interactive Tap-to-Fill OCR Chips
+        // 3. v3.0 Offline Resume-to-JD ATS Keyword Match & Gap Analyzer Card
+        if (activeOcrMode == OcrScanMode.JOB_AD) {
+            item {
+                val (matchScore, matchedKw, missingKw) = atsAnalysis
+                val scoreColor = when {
+                    matchScore >= 75 -> EmeraldOffer
+                    matchScore >= 50 -> CyanInterview
+                    else -> AmberAssessment
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f)
+                    ),
+                    border = BorderStroke(1.dp, scoreColor.copy(alpha = 0.45f))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Verified,
+                                    contentDescription = null,
+                                    tint = scoreColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column {
+                                    Text(
+                                        text = "Offline ATS Keyword Match: $matchScore%",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = scoreColor,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                    Text(
+                                        text = "Compares this screenshot JD against your Resume Skills Profile",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            TextButton(onClick = { showEditSkillsModal = true }) {
+                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("My Skills", fontSize = 12.sp)
+                            }
+                        }
+
+                        if (matchedKw.isNotEmpty() || missingKw.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                matchedKw.forEach { kw ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = EmeraldOffer.copy(alpha = 0.16f),
+                                        border = BorderStroke(1.dp, EmeraldOffer.copy(alpha = 0.45f))
+                                    ) {
+                                        Text(
+                                            text = "✓ $kw",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = EmeraldOffer,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                                missingKw.forEach { kw ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = AmberAssessment.copy(alpha = 0.16f),
+                                        border = BorderStroke(1.dp, AmberAssessment.copy(alpha = 0.45f)),
+                                        modifier = Modifier.clickable {
+                                            // Tap missing keyword to add it to your skills or notes!
+                                            onSaveUserSkillsCsv("$userSkillsCsv, $kw")
+                                        }
+                                    ) {
+                                        Text(
+                                            text = "+ Add '$kw' to Skills",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = AmberAssessment,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Interactive Tap-to-Fill OCR Chips
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -507,7 +639,7 @@ fun OcrScannerScreen(
             }
         }
 
-        // 4. Mode-Specific Verification Form (Job Ad vs Offer Letter vs Interview Invite)
+        // 5. Mode-Specific Verification Form (Job Ad vs Offer Letter vs Interview Invite)
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -598,7 +730,6 @@ fun OcrScannerScreen(
                             Text("Save Interview Round & Schedule Reminder", fontWeight = FontWeight.Bold)
                         }
                     } else {
-                        // Shared fields for JOB_AD & OFFER_LETTER
                         OutlinedTextField(
                             value = roleText,
                             onValueChange = { roleText = it },
@@ -785,6 +916,43 @@ fun OcrScannerScreen(
                 }
             }
         }
+    }
+
+    if (showEditSkillsModal) {
+        var skillsInput by remember { mutableStateOf(userSkillsCsv) }
+        AlertDialog(
+            onDismissRequest = { showEditSkillsModal = false },
+            title = { Text("My Resume & Technical Skills Profile") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Comma-separated skills used by CareerLens's offline ATS Keyword Matcher when scanning JobStreet or LinkedIn screenshots:",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp)
+                    )
+                    OutlinedTextField(
+                        value = skillsInput,
+                        onValueChange = { skillsInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 4
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onSaveUserSkillsCsv(skillsInput)
+                        showEditSkillsModal = false
+                    }
+                ) {
+                    Text("Save Skills")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditSkillsModal = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
