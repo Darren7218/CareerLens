@@ -115,15 +115,25 @@ fun PipelineDashboardScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Surface(
                         shape = RoundedCornerShape(50),
-                        color = EmeraldOffer.copy(alpha = 0.16f),
-                        border = BorderStroke(1.dp, EmeraldOffer.copy(alpha = 0.45f))
+                        color = ElectricIndigo.copy(alpha = 0.16f),
+                        border = BorderStroke(1.dp, ElectricIndigo.copy(alpha = 0.48f))
                     ) {
-                        Text(
-                            text = "v2.0 OFFLINE",
-                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
-                            color = EmeraldOffer,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(6.dp),
+                                shape = RoundedCornerShape(50),
+                                color = EmeraldOffer
+                            ) {}
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = "v4.0 • INT8 AI",
+                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
+                                color = ElectricIndigo
+                            )
+                        }
                     }
                 }
                 Text(
@@ -297,35 +307,59 @@ fun PipelineDashboardScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.AutoAwesome,
-                                    contentDescription = null,
-                                    tint = ElectricIndigo,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "Interactive Bounding-Box OCR (Job / Offer / Invite)",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp),
-                                        color = MaterialTheme.colorScheme.onSurface
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = ElectricIndigo.copy(alpha = 0.18f),
+                                    border = BorderStroke(1.dp, ElectricIndigo.copy(alpha = 0.36f))
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = ElectricIndigo,
+                                        modifier = Modifier
+                                            .padding(8.dp)
+                                            .size(20.dp)
                                     )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "3-Mode OCR & Semantic ATS",
+                                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp),
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(50),
+                                            color = EmeraldOffer.copy(alpha = 0.18f)
+                                        ) {
+                                            Text(
+                                                text = "ONNX",
+                                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp),
+                                                color = EmeraldOffer,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "Tap highlighted boxes directly on screenshots to extract RM/SGD, EPF % & hubs",
+                                        text = "Tap boxes on screenshots for RM/SGD, EPF % & hubs",
                                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
+                            Spacer(modifier = Modifier.width(8.dp))
                             Surface(
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 color = ElectricIndigo
                             ) {
                                 Text(
                                     text = "Scan",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 7.dp)
                                 )
                             }
                         }
@@ -349,7 +383,11 @@ fun PipelineDashboardScreen(
                         )
                     },
                     leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = null)
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            tint = ElectricIndigo
+                        )
                     },
                     trailingIcon = {
                         if (uiState.searchQuery.isNotBlank()) {
@@ -359,10 +397,12 @@ fun PipelineDashboardScreen(
                         }
                     },
                     singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = ElectricIndigo,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f),
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
                     )
                 )
 
@@ -377,21 +417,31 @@ fun PipelineDashboardScreen(
                         FilterChip(
                             selected = uiState.selectedStageFilter == null,
                             onClick = { onStageFilterChange(null) },
-                            label = { Text("All Stages (${uiState.applications.size})") }
+                            label = { Text("All (${uiState.applications.size})") },
+                            shape = RoundedCornerShape(12.dp)
                         )
                     }
                     items(JobStage.entries) { stage ->
                         val count = uiState.applications.count { it.stage == stage }
+                        val stageColor = stage.accentColor()
                         if (count > 0 || uiState.selectedStageFilter == stage) {
                             FilterChip(
                                 selected = uiState.selectedStageFilter == stage,
                                 onClick = {
                                     onStageFilterChange(if (uiState.selectedStageFilter == stage) null else stage)
                                 },
+                                leadingIcon = {
+                                    Surface(
+                                        modifier = Modifier.size(7.dp),
+                                        shape = RoundedCornerShape(50),
+                                        color = stageColor
+                                    ) {}
+                                },
                                 label = { Text("${stage.shortLabel} ($count)") },
+                                shape = RoundedCornerShape(12.dp),
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = stage.accentColor().copy(alpha = 0.22f),
-                                    selectedLabelColor = stage.accentColor()
+                                    selectedContainerColor = stageColor.copy(alpha = 0.20f),
+                                    selectedLabelColor = stageColor
                                 )
                             )
                         }
@@ -470,16 +520,81 @@ fun PipelineDashboardScreen(
                     }
                 }
 
-                items(uiState.filteredApplications, key = { it.id }) { app ->
-                    val symbol = currencyMap[app.currencyCode]?.symbol ?: "RM"
-                    JobApplicationCard(
-                        app = app,
-                        currencySymbol = symbol,
-                        isSalaryMasked = uiState.isSalaryPrivacyMasked,
-                        onClick = { onOpenJobDetail(app) },
-                        onQuickAdvanceStage = { onQuickAdvanceStage(app) },
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp)
-                    )
+                if (uiState.filteredApplications.isEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 18.dp, vertical = 10.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(22.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = ElectricIndigo.copy(alpha = 0.14f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = null,
+                                        tint = ElectricIndigo,
+                                        modifier = Modifier
+                                            .padding(10.dp)
+                                            .size(22.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text(
+                                    text = "No Matching Applications",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Try clearing your stage, hub, or keyword filter to see all ${uiState.applications.size} roles.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = ElectricIndigo.copy(alpha = 0.18f),
+                                    border = BorderStroke(1.dp, ElectricIndigo.copy(alpha = 0.42f)),
+                                    modifier = Modifier.clickable {
+                                        onSearchChange("")
+                                        onStageFilterChange(null)
+                                        onLocationFilterChange("All")
+                                    }
+                                ) {
+                                    Text(
+                                        text = "Reset All Filters",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = ElectricIndigo,
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    items(uiState.filteredApplications, key = { it.id }) { app ->
+                        val symbol = currencyMap[app.currencyCode]?.symbol ?: "RM"
+                        JobApplicationCard(
+                            app = app,
+                            currencySymbol = symbol,
+                            isSalaryMasked = uiState.isSalaryPrivacyMasked,
+                            onClick = { onOpenJobDetail(app) },
+                            onQuickAdvanceStage = { onQuickAdvanceStage(app) },
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp)
+                        )
+                    }
                 }
             }
         }

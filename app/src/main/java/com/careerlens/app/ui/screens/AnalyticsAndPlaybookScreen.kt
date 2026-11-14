@@ -69,7 +69,10 @@ import com.careerlens.app.domain.model.CurrentJobBaselineProfile
 import com.careerlens.app.domain.model.JobStage
 import com.careerlens.app.domain.model.MalaysiaPresets
 import com.careerlens.app.domain.model.StarStoryItem
+import com.careerlens.app.ui.components.CareerLensAmbientBackdrop
 import com.careerlens.app.ui.components.CompanyMonogramAvatar
+import com.careerlens.app.ui.components.SegmentedPillControl
+import com.careerlens.app.ui.components.SegmentedPillOption
 import com.careerlens.app.ui.components.formatCurrencyAmount
 import com.careerlens.app.ui.theme.AmberAssessment
 import com.careerlens.app.ui.theme.CyanInterview
@@ -101,53 +104,41 @@ fun AnalyticsAndPlaybookScreen(
         }
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(18.dp, 14.dp, 18.dp, 110.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+    CareerLensAmbientBackdrop(
+        primaryGlow = ElectricIndigo,
+        secondaryGlow = AmberAssessment
     ) {
-        // 1. Header & Sub-Tab Switcher
-        item {
-            Text(
-                text = "Analytics, Notice Buyout & Playbook",
-                style = MaterialTheme.typography.headlineMedium
-            )
-            Text(
-                text = "Funnel ROI, Malaysian Notice Period Buyout Math, Scripts & STAR Stories",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val tabs = listOf(
-                    0 to "Funnel & Radar",
-                    1 to "Notice & Buyout",
-                    2 to "MY Scripts",
-                    3 to "STAR Bank (${starStories.size})"
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(18.dp, 14.dp, 18.dp, 110.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // 1. Header & Sub-Tab Switcher
+            item {
+                Text(
+                    text = "Analytics, Notice Buyout & Playbook",
+                    style = MaterialTheme.typography.headlineMedium
                 )
-                items(tabs) { (idx, title) ->
-                    val isSelected = selectedSubTab == idx
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { selectedSubTab = idx },
-                        label = {
-                            Text(
-                                text = title,
-                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Normal
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = ElectricIndigo.copy(alpha = 0.22f),
-                            selectedLabelColor = ElectricIndigo
-                        )
-                    )
-                }
+                Text(
+                    text = "Funnel ROI, Malaysian Notice Period Buyout Math, Scripts & STAR Stories",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                SegmentedPillControl(
+                    options = listOf(
+                        SegmentedPillOption(0, "Funnel & Radar", ElectricIndigo),
+                        SegmentedPillOption(1, "Notice & Buyout", AmberAssessment),
+                        SegmentedPillOption(2, "MY Scripts", EmeraldOffer),
+                        SegmentedPillOption(3, "STAR Bank (${starStories.size})", CyanInterview)
+                    ),
+                    selectedValue = selectedSubTab,
+                    onSelect = { selectedSubTab = it },
+                    scrollable = true
+                )
             }
-        }
 
         when (selectedSubTab) {
             0 -> {
@@ -311,11 +302,18 @@ fun AnalyticsAndPlaybookScreen(
                             modifier = Modifier.padding(15.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text(
-                                text = story.competency.uppercase(),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = CyanInterview
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = CyanInterview.copy(alpha = 0.16f),
+                                border = BorderStroke(1.dp, CyanInterview.copy(alpha = 0.36f))
+                            ) {
+                                Text(
+                                    text = story.competency.uppercase(),
+                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
+                                    color = CyanInterview,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
                             Text(
                                 text = "Q: ${story.questionPrompt}",
                                 style = MaterialTheme.typography.titleMedium
@@ -328,17 +326,26 @@ fun AnalyticsAndPlaybookScreen(
                                 text = "• Action: ${story.actionTaken}",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp)
                             )
-                            Text(
-                                text = "• Result: ${story.resultImpact}",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
-                                color = EmeraldOffer,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = EmeraldOffer.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, EmeraldOffer.copy(alpha = 0.32f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "• Result: ${story.resultImpact}",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                                    color = EmeraldOffer,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+    }
     }
 
     if (showAddStarDialog) {

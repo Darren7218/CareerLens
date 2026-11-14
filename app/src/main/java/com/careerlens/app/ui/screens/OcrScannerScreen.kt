@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -66,6 +67,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -76,6 +78,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -89,6 +92,11 @@ import com.careerlens.app.domain.model.OcrScanMode
 import com.careerlens.app.domain.model.WorkMode
 import com.careerlens.app.domain.ocr.OcrBlockChip
 import com.careerlens.app.domain.ocr.ParsedJobScreenshot
+import com.careerlens.app.ui.components.AnimatedScoreRing
+import com.careerlens.app.ui.components.AnimatedSimilarityMeter
+import com.careerlens.app.ui.components.SegmentedPillControl
+import com.careerlens.app.ui.components.SegmentedPillOption
+import com.careerlens.app.ui.components.withTabularNumbers
 import com.careerlens.app.ui.theme.AmberAssessment
 import com.careerlens.app.ui.theme.CyanInterview
 import com.careerlens.app.ui.theme.ElectricIndigo
@@ -237,18 +245,27 @@ fun OcrScannerScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.DocumentScanner,
-                            contentDescription = null,
-                            tint = ElectricIndigo,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(11.dp),
+                            color = ElectricIndigo.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, ElectricIndigo.copy(alpha = 0.36f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DocumentScanner,
+                                contentDescription = null,
+                                tint = ElectricIndigo,
+                                modifier = Modifier
+                                    .padding(6.dp)
+                                    .size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "3-Mode OCR & ATS Matcher",
                             style = MaterialTheme.typography.headlineMedium
                         )
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Interactive Bounding-Box Canvas + Offline Resume ATS Gap Analyzer",
                         style = MaterialTheme.typography.bodyMedium,
@@ -257,32 +274,26 @@ fun OcrScannerScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // 3-Mode OCR Switcher (Job Ad / Offer Letter / Interview Invite)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OcrScanMode.entries.forEach { mode ->
-                    val isSelected = activeOcrMode == mode
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { onChangeOcrMode(mode) },
-                        label = {
-                            Text(
-                                text = mode.label,
-                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Normal,
-                                fontSize = 12.sp
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = ElectricIndigo.copy(alpha = 0.22f),
-                            selectedLabelColor = ElectricIndigo
-                        )
+            SegmentedPillControl(
+                options = OcrScanMode.entries.map { mode ->
+                    val modeAccent = when (mode) {
+                        OcrScanMode.JOB_AD -> ElectricIndigo
+                        OcrScanMode.OFFER_LETTER -> EmeraldOffer
+                        OcrScanMode.INTERVIEW_INVITE -> CyanInterview
+                    }
+                    SegmentedPillOption(
+                        value = mode,
+                        label = mode.label,
+                        accentColor = modeAccent
                     )
-                }
-            }
+                },
+                selectedValue = activeOcrMode,
+                onSelect = onChangeOcrMode,
+                scrollable = false
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -441,98 +452,178 @@ fun OcrScannerScreen(
                     matchScore >= 50 -> CyanInterview
                     else -> AmberAssessment
                 }
+                val matchTierLabel = when {
+                    matchScore >= 75 -> "Strong Alignment"
+                    matchScore >= 50 -> "Moderate Fit"
+                    else -> "Skill Gaps Detected"
+                }
 
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateContentSize(),
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.86f)
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f)
                     ),
-                    border = BorderStroke(1.dp, scoreColor.copy(alpha = 0.5f))
+                    border = BorderStroke(1.dp, scoreColor.copy(alpha = 0.50f))
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        // Hero Ring + Summary + Resume Edit Pill
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    Icons.Default.Verified,
-                                    contentDescription = null,
-                                    tint = scoreColor,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
+                            AnimatedScoreRing(
+                                scorePercent = matchScore,
+                                accentColor = scoreColor,
+                                size = 66.dp,
+                                strokeWidth = 6.5.dp,
+                                caption = "ATS"
+                            )
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
                                     Text(
-                                        text = "Semantic ATS Match: $matchScore%",
+                                        text = "Semantic ATS Match",
                                         style = MaterialTheme.typography.titleMedium,
-                                        color = scoreColor,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         fontWeight = FontWeight.ExtraBold
                                     )
+                                }
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = scoreColor.copy(alpha = 0.16f),
+                                    border = BorderStroke(1.dp, scoreColor.copy(alpha = 0.40f))
+                                ) {
                                     Text(
-                                        text = semanticAtsAnalysis.modelInfoSummary.ifBlank {
-                                            "Offline Semantic Resume-to-JD Vector Matcher"
-                                        },
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 10.sp),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        text = matchTierLabel,
+                                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
+                                        color = scoreColor,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = semanticAtsAnalysis.modelInfoSummary.ifBlank {
+                                        "Offline Semantic Resume-to-JD Vector Matcher"
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 10.5.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = ElectricIndigo.copy(alpha = 0.16f),
+                                border = BorderStroke(1.dp, ElectricIndigo.copy(alpha = 0.42f)),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { showEditSkillsModal = true }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "Edit Resume Profile",
+                                        tint = ElectricIndigo,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Resume",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                                        color = ElectricIndigo
                                     )
                                 }
                             }
-
-                            TextButton(onClick = { showEditSkillsModal = true }) {
-                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Resume", fontSize = 12.sp)
-                            }
                         }
 
-                        // Engine & Latency telemetry chip
-                        Spacer(modifier = Modifier.height(6.dp))
+                        // Engine & Latency telemetry pills
+                        Spacer(modifier = Modifier.height(10.dp))
                         val badgeColor = if (semanticAtsAnalysis.isNeuralOnnxActive) ElectricIndigo else CyanInterview
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = badgeColor.copy(alpha = 0.16f),
-                            border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.45f))
+                            shape = RoundedCornerShape(10.dp),
+                            color = badgeColor.copy(alpha = 0.14f),
+                            border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.40f)),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = "⚡ ${semanticAtsAnalysis.engineModeLabel} • ${semanticAtsAnalysis.inferenceLatencyMs} ms • ${semanticAtsAnalysis.extractedJdChunkCount} JD requirements analyzed (100% Offline)",
-                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
+                                text = "⚡ ${semanticAtsAnalysis.engineModeLabel}  •  ${semanticAtsAnalysis.inferenceLatencyMs} ms  •  ${semanticAtsAnalysis.extractedJdChunkCount} JD Reqs (100% Offline)",
+                                style = MaterialTheme.typography.labelMedium.withTabularNumbers().copy(fontSize = 10.5.sp),
                                 color = badgeColor,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                             )
                         }
 
                         // Semantic Synonym Bridges (non-exact conceptual hits)
                         if (semanticAtsAnalysis.synonymBridges.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = "🔗 Semantic Synonym Bridges (${semanticAtsAnalysis.synonymBridges.size})",
-                                style = MaterialTheme.typography.labelMedium,
+                                text = "SEMANTIC SYNONYM BRIDGES (${semanticAtsAnalysis.synonymBridges.size})",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontSize = 10.sp,
+                                    letterSpacing = 0.6.sp
+                                ),
                                 color = ElectricIndigo,
                                 fontWeight = FontWeight.ExtraBold
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 semanticAtsAnalysis.synonymBridges.forEach { bridge ->
                                     val simPct = (bridge.similarity * 100f).roundToInt()
                                     Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = ElectricIndigo.copy(alpha = 0.13f),
-                                        border = BorderStroke(1.dp, ElectricIndigo.copy(alpha = 0.38f)),
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = ElectricIndigo.copy(alpha = 0.11f),
+                                        border = BorderStroke(1.dp, ElectricIndigo.copy(alpha = 0.34f)),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Text(
-                                            text = "✓ \"${bridge.matchedUserSkill}\" ↔ \"${bridge.jdRequirement}\" ($simPct%)",
-                                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-                                        )
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "${bridge.matchedUserSkill}  ↔  ${bridge.jdRequirement}",
+                                                    style = MaterialTheme.typography.labelMedium.copy(
+                                                        fontSize = 11.5.sp,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    ),
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = "$simPct%",
+                                                    style = MaterialTheme.typography.labelMedium.withTabularNumbers().copy(
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.ExtraBold
+                                                    ),
+                                                    color = ElectricIndigo
+                                                )
+                                            }
+                                            AnimatedSimilarityMeter(
+                                                progress = bridge.similarity,
+                                                color = ElectricIndigo,
+                                                height = 4.5.dp
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -540,14 +631,23 @@ fun OcrScannerScreen(
 
                         // Exact Matches + True Semantic Gaps
                         if (semanticAtsAnalysis.exactMatches.isNotEmpty() || semanticAtsAnalysis.semanticGaps.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "EXACT MATCHES & MISSING SKILLS (TAP + TO ADD)",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontSize = 10.sp,
+                                    letterSpacing = 0.6.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 semanticAtsAnalysis.exactMatches.forEach { item ->
                                     Surface(
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = RoundedCornerShape(10.dp),
                                         color = EmeraldOffer.copy(alpha = 0.16f),
                                         border = BorderStroke(1.dp, EmeraldOffer.copy(alpha = 0.45f))
                                     ) {
@@ -555,30 +655,32 @@ fun OcrScannerScreen(
                                             text = "✓ ${item.jdRequirement}",
                                             style = MaterialTheme.typography.labelMedium,
                                             color = EmeraldOffer,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
                                         )
                                     }
                                 }
                                 semanticAtsAnalysis.semanticGaps.forEach { gap ->
                                     val simPct = (gap.bestSimilarity * 100f).roundToInt()
                                     Surface(
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = RoundedCornerShape(10.dp),
                                         color = AmberAssessment.copy(alpha = 0.16f),
-                                        border = BorderStroke(1.dp, AmberAssessment.copy(alpha = 0.45f)),
-                                        modifier = Modifier.clickable {
-                                            val updatedCsv = if (userSkillsCsv.isBlank()) {
-                                                gap.suggestedSkillToAdd
-                                            } else {
-                                                "$userSkillsCsv, ${gap.suggestedSkillToAdd}"
+                                        border = BorderStroke(1.dp, AmberAssessment.copy(alpha = 0.48f)),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable {
+                                                val updatedCsv = if (userSkillsCsv.isBlank()) {
+                                                    gap.suggestedSkillToAdd
+                                                } else {
+                                                    "$userSkillsCsv, ${gap.suggestedSkillToAdd}"
+                                                }
+                                                onSaveUserProfileAndSkills(updatedCsv, userResumeBullets)
                                             }
-                                            onSaveUserProfileAndSkills(updatedCsv, userResumeBullets)
-                                        }
                                     ) {
                                         Text(
                                             text = "+ Add '${gap.suggestedSkillToAdd}' ($simPct%)",
-                                            style = MaterialTheme.typography.labelMedium,
+                                            style = MaterialTheme.typography.labelMedium.withTabularNumbers(),
                                             color = AmberAssessment,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
                                         )
                                     }
                                 }

@@ -156,11 +156,11 @@ fun BentoMetricCard(
         modifier = modifier.then(
             if (onClick != null) Modifier.clickable { onClick() } else Modifier
         ),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f)
         ),
-        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.28f))
+        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.34f))
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
@@ -169,34 +169,44 @@ fun BentoMetricCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = title.uppercase(),
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 10.sp,
+                        letterSpacing = 0.6.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(accentColor.copy(alpha = 0.16f)),
-                    contentAlignment = Alignment.Center
+                Spacer(modifier = Modifier.width(6.dp))
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = accentColor.copy(alpha = 0.16f),
+                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.34f))
                 ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = title,
-                        tint = accentColor,
-                        modifier = Modifier.size(16.dp)
-                    )
+                    Box(
+                        modifier = Modifier.size(28.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = title,
+                            tint = accentColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = value,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineMedium.withTabularNumbers(),
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(3.dp))
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),

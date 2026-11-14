@@ -260,23 +260,42 @@ fun InterviewAgendaScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.84f)
                 ),
-                border = BorderStroke(1.dp, EmeraldOffer.copy(alpha = 0.35f))
+                border = BorderStroke(1.dp, EmeraldOffer.copy(alpha = 0.38f))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "100% Offline File Backup & PDF Report",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Text(
-                        text = "Save directly to your Android Downloads folder or Google Drive with zero cloud lock-in.",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = EmeraldOffer.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, EmeraldOffer.copy(alpha = 0.36f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PictureAsPdf,
+                                contentDescription = null,
+                                tint = EmeraldOffer,
+                                modifier = Modifier
+                                    .padding(6.dp)
+                                    .size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Offline File Backup & PDF Report",
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            Text(
+                                text = "Save directly to Android Downloads or Drive with zero cloud lock-in.",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.5.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -493,57 +512,81 @@ private fun InterviewRoundCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.CalendarMonth,
-                        contentDescription = null,
-                        tint = AmberAssessment,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "$formattedDate (${round.durationMins}m)",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = AmberAssessment
-                    )
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = AmberAssessment.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, AmberAssessment.copy(alpha = 0.32f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.CalendarMonth,
+                            contentDescription = null,
+                            tint = AmberAssessment,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "$formattedDate (${round.durationMins}m)",
+                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                            color = AmberAssessment
+                        )
+                    }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.VideoCall,
-                        contentDescription = null,
-                        tint = CyanInterview,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = round.formatOrLink,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = CyanInterview
-                    )
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = CyanInterview.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, CyanInterview.copy(alpha = 0.32f)),
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.VideoCall,
+                            contentDescription = null,
+                            tint = CyanInterview,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = round.formatOrLink,
+                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                            color = CyanInterview
+                        )
+                    }
                 }
             }
 
             if (round.prepChecklist.isNotBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.background.copy(alpha = 0.55f),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.background.copy(alpha = 0.62f),
+                    border = BorderStroke(1.dp, ElectricIndigo.copy(alpha = 0.26f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
+                    Column(modifier = Modifier.padding(11.dp)) {
                         Text(
                             text = "PREP CHECKLIST",
-                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 10.sp,
+                                letterSpacing = 0.6.sp
+                            ),
                             color = ElectricIndigo
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = round.prepChecklist,
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp)

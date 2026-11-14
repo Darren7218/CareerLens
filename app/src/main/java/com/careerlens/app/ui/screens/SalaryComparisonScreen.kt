@@ -37,6 +37,8 @@ import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -81,8 +83,11 @@ import com.careerlens.app.domain.calculator.OfferComparisonResult
 import com.careerlens.app.domain.model.CurrentJobBaselineProfile
 import com.careerlens.app.domain.model.MalaysiaPresets
 import com.careerlens.app.ui.components.CompanyMonogramAvatar
+import com.careerlens.app.ui.components.SegmentedPillControl
+import com.careerlens.app.ui.components.SegmentedPillOption
 import com.careerlens.app.ui.components.formatCompactNumber
 import com.careerlens.app.ui.components.formatCurrencyAmount
+import com.careerlens.app.ui.components.withTabularNumbers
 import com.careerlens.app.ui.theme.AmberAssessment
 import com.careerlens.app.ui.theme.CyanInterview
 import com.careerlens.app.ui.theme.ElectricIndigo
@@ -329,7 +334,7 @@ fun SalaryComparisonScreen(
                             }
                             Text(
                                 text = if (counterOfferDeltaMonthly == 0f) "Original Offer" else "+${counterOfferDeltaMonthly.toInt()}/mo Base",
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleMedium.withTabularNumbers(),
                                 color = if (counterOfferDeltaMonthly > 0f) EmeraldOffer else MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = FontWeight.ExtraBold
                             )
@@ -351,41 +356,25 @@ fun SalaryComparisonScreen(
 
             // 4. v3.0 Chart Switcher: Year-1 Stacked Package vs 4-Year Cumulative Wealth & Compounded KWSP
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = !showFourYearWealthMode,
-                        onClick = { showFourYearWealthMode = false },
-                        label = {
-                            Text(
-                                "Year-1 Package Breakdown",
-                                fontWeight = if (!showFourYearWealthMode) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = ElectricIndigo.copy(alpha = 0.22f),
-                            selectedLabelColor = ElectricIndigo
+                SegmentedPillControl(
+                    options = listOf(
+                        SegmentedPillOption(
+                            value = false,
+                            label = "Year-1 Package",
+                            accentColor = ElectricIndigo
+                        ),
+                        SegmentedPillOption(
+                            value = true,
+                            label = "4-Yr Wealth & KWSP",
+                            accentColor = EmeraldOffer
                         )
-                    )
-                    FilterChip(
-                        selected = showFourYearWealthMode,
-                        onClick = { showFourYearWealthMode = true },
-                        label = {
-                            Text(
-                                "4-Year Wealth & KWSP Dividend",
-                                fontWeight = if (showFourYearWealthMode) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = EmeraldOffer.copy(alpha = 0.22f),
-                            selectedLabelColor = EmeraldOffer
-                        )
-                    )
-                }
+                    ),
+                    selectedValue = showFourYearWealthMode,
+                    onSelect = { showFourYearWealthMode = it },
+                    scrollable = false
+                )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 if (!showFourYearWealthMode) {
                     StackedCompensationChartCard(
@@ -406,87 +395,121 @@ fun SalaryComparisonScreen(
             // 5. v3.0 Winner Insight Callout Banner (4-Year Total Wealth Winner + True Savings After Rent/Living Winner)
             item {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Max),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (highestFourYearOffer != null) {
                         Card(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            shape = RoundedCornerShape(18.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = EmeraldOffer.copy(alpha = 0.12f)
                             ),
-                            border = BorderStroke(1.dp, EmeraldOffer.copy(alpha = 0.4f))
+                            border = BorderStroke(1.dp, EmeraldOffer.copy(alpha = 0.44f))
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .padding(13.dp),
+                                verticalArrangement = Arrangement.SpaceBetween
+                            ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.EmojiEvents,
-                                        contentDescription = null,
-                                        tint = EmeraldOffer,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = EmeraldOffer.copy(alpha = 0.18f)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.EmojiEvents,
+                                            contentDescription = null,
+                                            tint = EmeraldOffer,
+                                            modifier = Modifier
+                                                .padding(4.dp)
+                                                .size(14.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "BEST 4-YR WEALTH + EPF",
+                                        text = "BEST 4-YR + EPF",
                                         style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
                                         color = EmeraldOffer
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = highestFourYearOffer.application.companyName,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = "$displayCurrencySymbol ${formatCurrencyAmount(highestFourYearOffer.fourYearCumulativeWealth, isSalaryMasked)} (4-Yr)",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = EmeraldOffer,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Column {
+                                    Text(
+                                        text = highestFourYearOffer.application.companyName,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "$displayCurrencySymbol ${formatCurrencyAmount(highestFourYearOffer.fourYearCumulativeWealth, isSalaryMasked)}",
+                                        style = MaterialTheme.typography.bodyMedium.withTabularNumbers(),
+                                        color = EmeraldOffer,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
                             }
                         }
                     }
 
                     if (highestSavingsAfterLivingOffer != null) {
                         Card(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            shape = RoundedCornerShape(18.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = CyanInterview.copy(alpha = 0.12f)
                             ),
-                            border = BorderStroke(1.dp, CyanInterview.copy(alpha = 0.4f))
+                            border = BorderStroke(1.dp, CyanInterview.copy(alpha = 0.44f))
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .padding(13.dp),
+                                verticalArrangement = Arrangement.SpaceBetween
+                            ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Savings,
-                                        contentDescription = null,
-                                        tint = CyanInterview,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = CyanInterview.copy(alpha = 0.18f)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Savings,
+                                            contentDescription = null,
+                                            tint = CyanInterview,
+                                            modifier = Modifier
+                                                .padding(4.dp)
+                                                .size(14.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "BEST NET SAVINGS (AFTER RENT)",
+                                        text = "BEST NET SAVINGS",
                                         style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
                                         color = CyanInterview
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = highestSavingsAfterLivingOffer.application.companyName,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = "$displayCurrencySymbol ${formatCurrencyAmount(highestSavingsAfterLivingOffer.monthlyTrueNetSavingsAfterLiving, isSalaryMasked)} / mo",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = CyanInterview,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Column {
+                                    Text(
+                                        text = highestSavingsAfterLivingOffer.application.companyName,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "$displayCurrencySymbol ${formatCurrencyAmount(highestSavingsAfterLivingOffer.monthlyTrueNetSavingsAfterLiving, isSalaryMasked)}/mo",
+                                        style = MaterialTheme.typography.bodyMedium.withTabularNumbers(),
+                                        color = CyanInterview,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
                             }
                         }
                     }

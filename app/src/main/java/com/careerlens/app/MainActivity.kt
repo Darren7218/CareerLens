@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -19,13 +20,13 @@ import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.WorkOutline
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,9 +38,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.careerlens.app.data.local.JobApplicationEntity
+import com.careerlens.app.ui.components.CareerLensSnackbarHost
 import com.careerlens.app.ui.screens.AddOrEditJobDialog
 import com.careerlens.app.ui.screens.AnalyticsAndPlaybookScreen
 import com.careerlens.app.ui.screens.ApplicationDetailDialog
@@ -141,43 +146,65 @@ private fun CareerLensAppRoot(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { CareerLensSnackbarHost(snackbarHostState) },
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp
-            ) {
-                BottomNavTab.entries.forEachIndexed { index, tab ->
-                    val isSelected = selectedTab == index
-                    val badgeCount = when (tab) {
-                        BottomNavTab.SALARY_STUDIO -> uiState.evaluatedOffers.size
-                        BottomNavTab.INTERVIEWS -> uiState.interviews.count { !it.isCompleted }
-                        else -> 0
-                    }
+            Column {
+                HorizontalDivider(
+                    thickness = 1.dp,
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+                )
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 4.dp
+                ) {
+                    BottomNavTab.entries.forEachIndexed { index, tab ->
+                        val isSelected = selectedTab == index
+                        val badgeCount = when (tab) {
+                            BottomNavTab.SALARY_STUDIO -> uiState.evaluatedOffers.size
+                            BottomNavTab.INTERVIEWS -> uiState.interviews.count { !it.isCompleted }
+                            else -> 0
+                        }
 
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = { selectedTab = index },
-                        icon = {
-                            BadgedBox(
-                                badge = {
-                                    if (badgeCount > 0) {
-                                        Badge(containerColor = EmeraldOffer) {
-                                            Text(badgeCount.toString())
+                        NavigationBarItem(
+                            selected = isSelected,
+                            onClick = { selectedTab = index },
+                            icon = {
+                                BadgedBox(
+                                    badge = {
+                                        if (badgeCount > 0) {
+                                            Badge(containerColor = EmeraldOffer) {
+                                                Text(
+                                                    text = badgeCount.toString(),
+                                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp)
+                                                )
+                                            }
                                         }
                                     }
+                                ) {
+                                    Icon(imageVector = tab.icon, contentDescription = tab.label)
                                 }
-                            ) {
-                                Icon(imageVector = tab.icon, contentDescription = tab.label)
-                            }
-                        },
-                        label = { Text(tab.label) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = ElectricIndigo,
-                            selectedTextColor = ElectricIndigo,
-                            indicatorColor = ElectricIndigo.copy(alpha = 0.16f)
+                            },
+                            label = {
+                                Text(
+                                    text = tab.label,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontSize = 10.5.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                )
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = ElectricIndigo,
+                                selectedTextColor = ElectricIndigo,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                indicatorColor = ElectricIndigo.copy(alpha = 0.16f)
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
