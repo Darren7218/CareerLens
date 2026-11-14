@@ -68,7 +68,8 @@ data class CurrentJobBaselineProfile(
     val expectedEpfDividendPercent: Double = 5.8, // Historical KWSP conventional/shariah range ~5.5% - 6.3%
     val currentNoticePeriodMonths: Int = 2,
     val remainingAnnualLeaveDays: Int = 8,
-    val userSkillsCsv: String = "Kotlin, Jetpack Compose, Android SDK, Coroutines, StateFlow, Room SQLite, MVVM, Clean Architecture, Google ML Kit, OCR, REST API, Git, CI/CD, Unit Testing, Agile"
+    val userSkillsCsv: String = "Kotlin, Jetpack Compose, Android SDK, Coroutines, StateFlow, Room SQLite, MVVM, Clean Architecture, Google ML Kit, OCR, REST API, Git, CI/CD, Unit Testing, Agile",
+    val userResumeSummaryBullets: String = "• Architected offline-first Room SQLite persistence with Kotlin Coroutines and StateFlow\n• Built Jetpack Compose Material 3 UI screens and automated CI/CD GitHub Actions pipelines\n• Delivered Android apps using Clean Architecture, Hilt DI, and JUnit/MockK unit tests"
 )
 
 /**

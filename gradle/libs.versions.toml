@@ -10,9 +10,11 @@ room = "2.6.1"
 ksp = "2.0.21-1.0.27"
 workRuntimeKtx = "2.10.0"
 mlkitTextRecognition = "16.0.1"
+onnxruntime = "1.19.2"
 coilCompose = "2.7.0"
 kotlinxSerializationJson = "1.7.3"
 coroutinesPlayServices = "1.9.0"
+junit = "4.13.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -44,6 +46,11 @@ kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "ko
 # Local Image Loading & JSON Serialization for Backup
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coilCompose" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+
+# On-Device Offline Neural Inference (INT8 ONNX Runtime Mobile + JVM Test Verification)
+onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
+onnxruntime-jvm = { group = "com.microsoft.onnxruntime", name = "onnxruntime", version.ref = "onnxruntime" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

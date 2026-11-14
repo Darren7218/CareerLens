@@ -114,6 +114,7 @@ private fun CareerLensAppRoot(
     val activeOcrMode by viewModel.activeOcrMode.collectAsStateWithLifecycle()
     val parsedOcrResult by viewModel.parsedOcrResult.collectAsStateWithLifecycle()
     val isOcrProcessing by viewModel.isOcrProcessing.collectAsStateWithLifecycle()
+    val semanticAtsAnalysis by viewModel.semanticAtsAnalysis.collectAsStateWithLifecycle()
     val bannerMessage by viewModel.statusBannerMessage.collectAsStateWithLifecycle()
 
     var selectedTab by remember { mutableIntStateOf(BottomNavTab.PIPELINE.ordinal) }
@@ -211,12 +212,20 @@ private fun CareerLensAppRoot(
                         activeOcrMode = activeOcrMode,
                         parsedResult = parsedOcrResult,
                         isProcessing = isOcrProcessing,
+                        semanticAtsAnalysis = semanticAtsAnalysis,
                         availableCurrencies = uiState.currencies.map { it.code },
                         existingApplications = uiState.applications,
                         userSkillsCsv = uiState.currentBaseline.userSkillsCsv,
-                        onSaveUserSkillsCsv = { updatedSkills ->
-                            viewModel.saveCurrentBaseline(uiState.currentBaseline.copy(userSkillsCsv = updatedSkills))
+                        userResumeBullets = uiState.currentBaseline.userResumeSummaryBullets,
+                        onSaveUserProfileAndSkills = { updatedSkills, updatedBullets ->
+                            viewModel.saveCurrentBaseline(
+                                uiState.currentBaseline.copy(
+                                    userSkillsCsv = updatedSkills,
+                                    userResumeSummaryBullets = updatedBullets
+                                )
+                            )
                         },
+                        onRefreshSemanticAts = viewModel::refreshSemanticAts,
                         onChangeOcrMode = viewModel::setOcrMode,
                         onPickScreenshotUri = viewModel::scanScreenshotUri,
                         onLoadSampleTemplate = viewModel::loadDemoMalaysiaJobScreenshotTemplate,

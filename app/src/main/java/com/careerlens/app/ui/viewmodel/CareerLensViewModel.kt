@@ -19,6 +19,8 @@ import com.careerlens.app.domain.model.MalaysiaPresets
 import com.careerlens.app.domain.model.OcrScanMode
 import com.careerlens.app.domain.model.StarStoryItem
 import com.careerlens.app.domain.notification.InterviewReminderWorker
+import com.careerlens.app.domain.ats.SemanticAtsAnalysis
+import com.careerlens.app.domain.ats.SemanticAtsEngine
 import com.careerlens.app.domain.ocr.MalaysiaOcrParserEngine
 import com.careerlens.app.domain.ocr.ParsedJobScreenshot
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +57,7 @@ class CareerLensViewModel(application: Application) : AndroidViewModel(applicati
     private val prefs = application.getSharedPreferences("careerlens_v2_prefs", Context.MODE_PRIVATE)
     private val dao = CareerLensDatabase.getInstance(application).dao()
     private val ocrEngine = MalaysiaOcrParserEngine()
+    private val semanticAtsEngine = SemanticAtsEngine.getInstance()
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     private val _searchQuery = MutableStateFlow("")
@@ -78,8 +81,50 @@ class CareerLensViewModel(application: Application) : AndroidViewModel(applicati
     private val _isOcrProcessing = MutableStateFlow(false)
     val isOcrProcessing: StateFlow<Boolean> = _isOcrProcessing.asStateFlow()
 
+    private val _semanticAtsAnalysis = MutableStateFlow(SemanticAtsAnalysis())
+    val semanticAtsAnalysis: StateFlow<SemanticAtsAnalysis> = _semanticAtsAnalysis.asStateFlow()
+
     private val _statusBannerMessage = MutableStateFlow<String?>(null)
     val statusBannerMessage: StateFlow<String?> = _statusBannerMessage.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            combine(_parsedOcrResult, _currentBaseline) { parsed, baseline ->
+                parsed to baseline
+            }.collect { (parsed, baseline) ->
+                if (parsed.fullRawText.isNotBlank() || parsed.detectedRole.isNotBlank()) {
+                    _semanticAtsAnalysis.value = semanticAtsEngine.analyzeAsync(
+                        context = getApplication(),
+                        jdRawText = parsed.fullRawText,
+                        roleTitle = parsed.detectedRole,
+                        notesText = parsed.detectedNotes,
+                        userSkillsCsv = baseline.userSkillsCsv,
+                        userResumeBullets = baseline.userResumeSummaryBullets
+                    )
+                }
+            }
+        }
+    }
+
+    fun refreshSemanticAts(roleOverride: String, notesOverride: String) {
+        val parsed = _parsedOcrResult.value
+        val baseline = _currentBaseline.value
+        viewModelScope.launch {
+            _semanticAtsAnalysis.value = semanticAtsEngine.analyzeAsync(
+                context = getApplication(),
+                jdRawText = parsed.fullRawText,
+                roleTitle = roleOverride,
+                notesText = notesOverride,
+                userSkillsCsv = baseline.userSkillsCsv,
+                userResumeBullets = baseline.userResumeSummaryBullets
+            )
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        semanticAtsEngine.close()
+    }
 
     private fun loadSavedBaseline(): CurrentJobBaselineProfile {
         val raw = prefs.getString("current_baseline_json", null) ?: return CurrentJobBaselineProfile()
@@ -416,13 +461,13 @@ class CareerLensViewModel(application: Application) : AndroidViewModel(applicati
         val sampleTexts = listOf(
             """
             JobStreet Malaysia • Posted 2 hours ago
-            Principal Android Engineer (Jetpack Compose)
+            Principal Android Engineer (Declarative Android UI)
             GXBank (GrabFin Digital Bank)
             First Avenue, Bandar Utama, Petaling Jaya, Selangor
             Hybrid (3 days office, 2 days WFH)
             RM 13,500 - RM 17,000 per month
             16% Employer EPF • Flexible Benefits • 2.5 months performance bonus
-            Requirements: Kotlin, Coroutines, Offline-First Room DB, Clean Architecture
+            Requirements: Kotlin, Coroutines, Offline-First Room DB, Clean Architecture, DevOps automated release pipeline, Kubernetes container orchestration
             """.trimIndent(),
             """
             LETTER OF EMPLOYMENT OFFER — PRIVATE & CONFIDENTIAL

@@ -14,8 +14,8 @@ android {
         applicationId = "com.careerlens.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "3.0.0"
+        versionCode = 4
+        versionName = "4.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -44,6 +44,10 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    androidResources {
+        noCompress += listOf("onnx", "tflite")
     }
 
     packaging {
@@ -82,6 +86,12 @@ dependencies {
     // Image Loading & JSON Serialization
     implementation(libs.coil.compose)
     implementation(libs.kotlinx.serialization.json)
+
+    // On-Device Offline Neural ATS Matcher (ONNX Runtime Mobile INT8)
+    implementation(libs.onnxruntime.android)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.onnxruntime.jvm)
 
     debugImplementation(libs.androidx.ui.tooling)
 }

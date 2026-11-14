@@ -81,6 +81,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.careerlens.app.data.local.InterviewRoundEntity
 import com.careerlens.app.data.local.JobApplicationEntity
+import com.careerlens.app.domain.ats.SemanticAtsAnalysis
 import com.careerlens.app.domain.model.InterviewRoundType
 import com.careerlens.app.domain.model.JobStage
 import com.careerlens.app.domain.model.MalaysiaPresets
@@ -92,7 +93,7 @@ import com.careerlens.app.ui.theme.AmberAssessment
 import com.careerlens.app.ui.theme.CyanInterview
 import com.careerlens.app.ui.theme.ElectricIndigo
 import com.careerlens.app.ui.theme.EmeraldOffer
-import kotlin.math.max
+import kotlin.math.roundToInt
 
 private enum class AssignTargetField(val label: String, val color: Color) {
     ROLE("Role Title", ElectricIndigo),
@@ -110,10 +111,13 @@ fun OcrScannerScreen(
     activeOcrMode: OcrScanMode,
     parsedResult: ParsedJobScreenshot,
     isProcessing: Boolean,
+    semanticAtsAnalysis: SemanticAtsAnalysis,
     availableCurrencies: List<String>,
     existingApplications: List<JobApplicationEntity>,
     userSkillsCsv: String,
-    onSaveUserSkillsCsv: (String) -> Unit,
+    userResumeBullets: String,
+    onSaveUserProfileAndSkills: (String, String) -> Unit,
+    onRefreshSemanticAts: (String, String) -> Unit,
     onChangeOcrMode: (OcrScanMode) -> Unit,
     onPickScreenshotUri: (Uri) -> Unit,
     onLoadSampleTemplate: (Int) -> Unit,
@@ -176,32 +180,17 @@ fun OcrScannerScreen(
         mutableStateOf(existingApplications.firstOrNull())
     }
 
-    // v3.0 Offline ATS Keyword Gap Analysis (Screenshot JD vs User's Skills Profile)
-    val atsAnalysis = remember(parsedResult.fullRawText, roleText, notesText, userSkillsCsv) {
-        val combinedJdText = "${parsedResult.fullRawText} $roleText $notesText".lowercase()
-        val userSkills = userSkillsCsv.split(",")
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-        val userSkillsLower = userSkills.map { it.lowercase() }.toSet()
-
-        // Find all tech/domain keywords mentioned in the JD screenshot (plus any user skill mentioned)
-        val candidatePool = (MalaysiaPresets.commonTechAndDomainKeywords + userSkills).distinctBy { it.lowercase() }
-        val keywordsInJd = candidatePool.filter { kw ->
-            combinedJdText.contains(kw.lowercase())
+    // v4.0 Trigger Semantic ONNX / Concept-Graph ATS Match whenever JD, Role, Notes, or Resume Profile changes
+    LaunchedEffect(
+        parsedResult.fullRawText,
+        roleText,
+        notesText,
+        userSkillsCsv,
+        userResumeBullets
+    ) {
+        if (parsedResult.fullRawText.isNotBlank() || roleText.isNotBlank()) {
+            onRefreshSemanticAts(roleText, notesText)
         }
-
-        val matched = keywordsInJd.filter { kw ->
-            userSkillsLower.any { u -> u.contains(kw.lowercase()) || kw.lowercase().contains(u) }
-        }
-        val missing = keywordsInJd.filterNot { kw ->
-            matched.any { m -> m.equals(kw, ignoreCase = true) }
-        }
-        val matchScore = if (keywordsInJd.isNotEmpty()) {
-            ((matched.size * 100) / max(1, keywordsInJd.size)).coerceIn(0, 100)
-        } else {
-            85
-        }
-        Triple(matchScore, matched, missing)
     }
 
     fun applyChipToActiveField(chip: OcrBlockChip) {
@@ -443,10 +432,10 @@ fun OcrScannerScreen(
             }
         }
 
-        // 3. v3.0 Offline Resume-to-JD ATS Keyword Match & Gap Analyzer Card
+        // 3. v4.0 Offline Semantic Neural ATS Match & Synonym Bridge Card
         if (activeOcrMode == OcrScanMode.JOB_AD) {
             item {
-                val (matchScore, matchedKw, missingKw) = atsAnalysis
+                val matchScore = semanticAtsAnalysis.overallScorePercent
                 val scoreColor = when {
                     matchScore >= 75 -> EmeraldOffer
                     matchScore >= 50 -> CyanInterview
@@ -457,9 +446,9 @@ fun OcrScannerScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f)
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.86f)
                     ),
-                    border = BorderStroke(1.dp, scoreColor.copy(alpha = 0.45f))
+                    border = BorderStroke(1.dp, scoreColor.copy(alpha = 0.5f))
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(
@@ -467,24 +456,29 @@ fun OcrScannerScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 Icon(
                                     Icons.Default.Verified,
                                     contentDescription = null,
                                     tint = scoreColor,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(
-                                        text = "Offline ATS Keyword Match: $matchScore%",
+                                        text = "Semantic ATS Match: $matchScore%",
                                         style = MaterialTheme.typography.titleMedium,
                                         color = scoreColor,
                                         fontWeight = FontWeight.ExtraBold
                                     )
                                     Text(
-                                        text = "Compares this screenshot JD against your Resume Skills Profile",
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
+                                        text = semanticAtsAnalysis.modelInfoSummary.ifBlank {
+                                            "Offline Semantic Resume-to-JD Vector Matcher"
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 10.sp),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -493,42 +487,95 @@ fun OcrScannerScreen(
                             TextButton(onClick = { showEditSkillsModal = true }) {
                                 Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("My Skills", fontSize = 12.sp)
+                                Text("Resume", fontSize = 12.sp)
                             }
                         }
 
-                        if (matchedKw.isNotEmpty() || missingKw.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(8.dp))
+                        // Engine & Latency telemetry chip
+                        Spacer(modifier = Modifier.height(6.dp))
+                        val badgeColor = if (semanticAtsAnalysis.isNeuralOnnxActive) ElectricIndigo else CyanInterview
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = badgeColor.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.45f))
+                        ) {
+                            Text(
+                                text = "⚡ ${semanticAtsAnalysis.engineModeLabel} • ${semanticAtsAnalysis.inferenceLatencyMs} ms • ${semanticAtsAnalysis.extractedJdChunkCount} JD requirements analyzed (100% Offline)",
+                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
+                                color = badgeColor,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+
+                        // Semantic Synonym Bridges (non-exact conceptual hits)
+                        if (semanticAtsAnalysis.synonymBridges.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "🔗 Semantic Synonym Bridges (${semanticAtsAnalysis.synonymBridges.size})",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = ElectricIndigo,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                semanticAtsAnalysis.synonymBridges.forEach { bridge ->
+                                    val simPct = (bridge.similarity * 100f).roundToInt()
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = ElectricIndigo.copy(alpha = 0.13f),
+                                        border = BorderStroke(1.dp, ElectricIndigo.copy(alpha = 0.38f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = "✓ \"${bridge.matchedUserSkill}\" ↔ \"${bridge.jdRequirement}\" ($simPct%)",
+                                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Exact Matches + True Semantic Gaps
+                        if (semanticAtsAnalysis.exactMatches.isNotEmpty() || semanticAtsAnalysis.semanticGaps.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                matchedKw.forEach { kw ->
+                                semanticAtsAnalysis.exactMatches.forEach { item ->
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
                                         color = EmeraldOffer.copy(alpha = 0.16f),
                                         border = BorderStroke(1.dp, EmeraldOffer.copy(alpha = 0.45f))
                                     ) {
                                         Text(
-                                            text = "✓ $kw",
+                                            text = "✓ ${item.jdRequirement}",
                                             style = MaterialTheme.typography.labelMedium,
                                             color = EmeraldOffer,
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                         )
                                     }
                                 }
-                                missingKw.forEach { kw ->
+                                semanticAtsAnalysis.semanticGaps.forEach { gap ->
+                                    val simPct = (gap.bestSimilarity * 100f).roundToInt()
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
                                         color = AmberAssessment.copy(alpha = 0.16f),
                                         border = BorderStroke(1.dp, AmberAssessment.copy(alpha = 0.45f)),
                                         modifier = Modifier.clickable {
-                                            // Tap missing keyword to add it to your skills or notes!
-                                            onSaveUserSkillsCsv("$userSkillsCsv, $kw")
+                                            val updatedCsv = if (userSkillsCsv.isBlank()) {
+                                                gap.suggestedSkillToAdd
+                                            } else {
+                                                "$userSkillsCsv, ${gap.suggestedSkillToAdd}"
+                                            }
+                                            onSaveUserProfileAndSkills(updatedCsv, userResumeBullets)
                                         }
                                     ) {
                                         Text(
-                                            text = "+ Add '$kw' to Skills",
+                                            text = "+ Add '${gap.suggestedSkillToAdd}' ($simPct%)",
                                             style = MaterialTheme.typography.labelMedium,
                                             color = AmberAssessment,
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -920,18 +967,27 @@ fun OcrScannerScreen(
 
     if (showEditSkillsModal) {
         var skillsInput by remember { mutableStateOf(userSkillsCsv) }
+        var bulletsInput by remember { mutableStateOf(userResumeBullets) }
         AlertDialog(
             onDismissRequest = { showEditSkillsModal = false },
             title = { Text("My Resume & Technical Skills Profile") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "Comma-separated skills used by CareerLens's offline ATS Keyword Matcher when scanning JobStreet or LinkedIn screenshots:",
+                        "CareerLens's offline ONNX neural model embeds both your comma-separated Skills and Experience Bullets to match semantic synonyms (e.g. CI/CD ↔ DevOps pipeline, K8s ↔ Kubernetes):",
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp)
                     )
                     OutlinedTextField(
                         value = skillsInput,
                         onValueChange = { skillsInput = it },
+                        label = { Text("Core Skills (comma-separated)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3
+                    )
+                    OutlinedTextField(
+                        value = bulletsInput,
+                        onValueChange = { bulletsInput = it },
+                        label = { Text("Resume Experience Bullets (1 per line)") },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 4
                     )
@@ -940,11 +996,11 @@ fun OcrScannerScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        onSaveUserSkillsCsv(skillsInput)
+                        onSaveUserProfileAndSkills(skillsInput, bulletsInput)
                         showEditSkillsModal = false
                     }
                 ) {
-                    Text("Save Skills")
+                    Text("Save Resume Profile")
                 }
             },
             dismissButton = {

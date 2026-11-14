@@ -1,0 +1,27 @@
+{
+  "model_id": "careerlens-bge-micro-v2-my-ats-int8",
+  "base_model": "TaylorAI/bge-micro-v2",
+  "embedding_dim": 384,
+  "max_seq_length": 128,
+  "pooling_mode": "mean",
+  "normalize_embeddings": true,
+  "uses_token_type_ids": true,
+  "do_lower_case": true,
+  "cls_token_id": 101,
+  "sep_token_id": 102,
+  "pad_token_id": 0,
+  "unk_token_id": 100,
+  "vocab_size": 30522,
+  "input_names": [
+    "input_ids",
+    "attention_mask",
+    "token_type_ids"
+  ],
+  "output_name": "last_hidden_state",
+  "quantization": "Dynamic INT8 Per-Channel (MatMul+Gather QInt8)",
+  "fp32_size_mb": 65.83,
+  "int8_size_mb": 16.65,
+  "compression_ratio": 3.96,
+  "fp32_to_int8_mean_cosine_fidelity": 0.9976,
+  "cpu_4thread_latency_64tok_ms": 19.43
+}
